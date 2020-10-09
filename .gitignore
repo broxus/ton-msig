@@ -1,3 +1,11 @@
+.vs/
+.idea/
+out/
+cmake-*/
+build/
+
+CMakeSettings.json
+
 # Prerequisites
 *.d
 
