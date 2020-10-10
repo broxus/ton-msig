@@ -34,14 +34,31 @@ void App::start_up()
 
     client_.set_client(get_client_ref());
 
-    hangup();
+    block::StdAddress target_addr;
+    CHECK(target_addr.parse_addr("0:ac8016e6a27436d0c5fdac85e2fdee11c8d900dba34bb92949cee53f42a6f45b"))
+
+    make_request<msig::GetParameters>(target_addr, [this](td::Result<msig::GetParameters::Result> R) {
+        if (R.is_error()) {
+            LOG(ERROR) << R.move_as_error().message();
+            hangup();
+            return;
+        }
+        else {
+            auto parameters = R.move_as_ok();
+            LOG(WARNING) << "max queued tx: " << parameters.max_custodian_count << "\nmax custodian count: " << parameters.max_custodian_count
+                         << "\nexpiration time: " << parameters.expiration_time << "\nmin_value " << parameters.min_value.to_dec_string()
+                         << "\nrequired txn confirms: " << parameters.required_txn_confirms;
+        }
+        hangup();
+    });
 }
 
 auto App::get_client_ref() -> tonlib::ExtClientRef
 {
-    return tonlib::ExtClientRef{.andl_ext_client_ = raw_client_.get(),
-                                .last_block_actor_ = raw_last_block_.get(),
-                                .last_config_actor_ = raw_last_config_.get()};
+    return tonlib::ExtClientRef{
+        .andl_ext_client_ = raw_client_.get(),
+        .last_block_actor_ = raw_last_block_.get(),
+        .last_config_actor_ = raw_last_config_.get()};
 }
 
 void App::init_ext_client()
@@ -106,9 +123,10 @@ void App::init_last_config()
         td::actor::ActorShared<App> client_;
     };
 
-    raw_last_config_ = td::actor::create_actor<tonlib::LastConfig>(td::actor::ActorOptions().with_name("LastConfig").with_poll(false),
-                                                                   get_client_ref(),
-                                                                   td::make_unique<Callback>(td::actor::actor_shared(this)));
+    raw_last_config_ = td::actor::create_actor<tonlib::LastConfig>(
+        td::actor::ActorOptions().with_name("LastConfig").with_poll(false),
+        get_client_ref(),
+        td::make_unique<Callback>(td::actor::actor_shared(this)));
 }
 
 void App::hangup_shared()

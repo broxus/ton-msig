@@ -9,11 +9,16 @@ set(${SUBPROJ_NAME}_MINOR_VERSION 0)
 set(${SUBPROJ_NAME}_PATCH_VERSION 1)
 
 set(${SUBPROJ_NAME}_HEADERS
-        "App.hpp")
+        "Action.hpp"
+        "App.hpp"
+        "Stuff.hpp"
+        "Wallet.hpp")
 
 set(${SUBPROJ_NAME}_SOURCES
+        "Action.cpp"
         "main.cpp"
-        "App.cpp")
+        "App.cpp"
+        "Wallet.cpp")
 
 # ############################################################### #
 # Options ####################################################### #
