@@ -101,6 +101,92 @@ auto decode_custodian(const ValueRef& value) -> Custodian
 
 }  // namespace
 
+// submit_transaction
+
+SubmitTransaction::SubmitTransaction(
+    Action::Handler&& promise,
+    const block::StdAddress& dest,
+    const td::BigInt256& value,
+    bool bounce,
+    bool all_balance,
+    td::Ref<vm::Cell> payload,
+    const td::Ed25519::PrivateKey& private_key)
+    : Action{std::move(promise)}
+    , dest_{dest}
+    , value_{value}
+    , bounce_{bounce}
+    , all_balance_{all_balance}
+    , payload_{std::move(payload)}
+    , private_key_{private_key.as_octet_string().copy()}
+{
+}
+
+auto SubmitTransaction::output_type() -> ftabi::ParamRef
+{
+    static ParamRef param{ParamUint{"transId", 64}};
+    return param;
+}
+
+auto SubmitTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>>
+{
+    static auto input_params = make_params(ParamAddress{"dest"}, ParamUint{"value", 128}, ParamBool{"bounce"}, ParamBool{"allBalance"}, ParamCell{"payload"});
+    static auto function = td::Ref{Function{"submitTransaction", make_header_params(), move_copy(input_params), {output_type()}}};
+
+    TRY_RESULT(public_key, private_key_.get_public_key());
+
+    HeaderValues header_values = make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()));
+    InputValues input_values{
+        make_value<ValueAddress>(input_params[0], dest_),
+        make_value<ValueInt>(input_params[1], value_),
+        make_value<ValueBool>(input_params[2], bounce_),
+        make_value<ValueBool>(input_params[3], all_balance_),
+        make_value<ValueCell>(input_params[4], payload_)};
+
+    FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
+
+    TRY_RESULT(body, function->encode_input(call))
+    return std::make_pair(function, std::move(body));
+}
+
+auto SubmitTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
+{
+    TRY_STATUS(check_output<SubmitTransaction>(result))
+    promise.set_result(result[0]->as<ValueInt>().get<td::uint64>());
+    return td::Status::OK();
+}
+
+// confirm_transaction
+
+ConfirmTransaction::ConfirmTransaction(Action::Handler&& promise, td::uint64 transaction_id, const td::Ed25519::PrivateKey& private_key)
+    : Action{std::move(promise)}
+    , transaction_id_{transaction_id}
+    , private_key_{private_key.as_octet_string().copy()}
+{
+}
+
+auto ConfirmTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>>
+{
+    static ParamRef input_param{ParamUint{"transactionId", 64}};
+    static auto function = td::Ref{Function{"isConfirmed", make_header_params(), {input_param}, {output_type()}}};
+
+    TRY_RESULT(public_key, private_key_.get_public_key());
+
+    HeaderValues header_values = make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()));
+    InputValues input_values{make_value<ValueInt>(input_param, td::make_bigint(transaction_id_))};
+
+    FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
+
+    TRY_RESULT(body, function->encode_input(call))
+    return std::make_pair(function, std::move(body));
+}
+
+auto ConfirmTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
+{
+    TRY_STATUS(check_output<ConfirmTransaction>(result))
+    promise.set_result(std::nullopt);
+    return td::Status::OK();
+}
+
 // is_confirmed
 
 IsConfirmed::IsConfirmed(Action::Handler&& promise, td::uint32 mask, td::uint8 index)
@@ -308,5 +394,4 @@ auto GetCustodians::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::
     promise.set_result(std::move(deserialized));
     return td::Status::OK();
 }
-
 }  // namespace app::msig

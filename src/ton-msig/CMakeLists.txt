@@ -71,8 +71,7 @@ target_include_directories(
         INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 target_link_libraries(${SUBPROJ_NAME} PRIVATE
-        tonlib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope
-        ftabi pqxx)
+        tonlib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope ftabi)
 
 target_compile_definitions(${SUBPROJ_NAME} PUBLIC "$<$<CONFIG:DEBUG>:VERBOSE>")
 

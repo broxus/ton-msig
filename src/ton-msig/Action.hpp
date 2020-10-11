@@ -11,7 +11,21 @@ using EncodedBody = std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>;
 struct ActionBase {
     virtual auto create_body() -> td::Result<EncodedBody> = 0;
     virtual auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status = 0;
-    virtual auto is_get_method() const -> bool = 0;
+    [[nodiscard]] virtual auto is_get_method() const -> bool = 0;
+
+    template <typename T>
+    auto as() -> T&
+    {
+        static_assert(std::is_base_of_v<ActionBase, T>);
+        return *dynamic_cast<T*>(this);
+    }
+
+    template <typename T>
+    auto as() const -> const T&
+    {
+        static_assert(std::is_base_of_v<ActionBase, T>);
+        return *dynamic_cast<const T*>(this);
+    }
 };
 
 template <int id_, typename R>
@@ -56,6 +70,41 @@ struct Custodian {
 };
 
 enum { submit_transaction, confirm_transaction, is_confirmed, get_parameters, get_transaction, get_transaction_ids, get_transactions, get_custodians };
+
+struct SubmitTransaction final : Action<submit_transaction, td::uint64> {
+    explicit SubmitTransaction(
+        Handler&& promise,
+        const block::StdAddress& dest,
+        const td::BigInt256& value,
+        bool bounce,
+        bool all_balance,
+        td::Ref<vm::Cell> payload,
+        const td::Ed25519::PrivateKey& private_key);
+
+    static auto output_type() -> ftabi::ParamRef;
+    auto create_body() -> td::Result<EncodedBody> final;
+    auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return false; }
+
+    block::StdAddress dest_;
+    td::BigInt256 value_;
+    bool bounce_;
+    bool all_balance_;
+    td::Ref<vm::Cell> payload_;
+    td::Ed25519::PrivateKey private_key_;
+};
+
+struct ConfirmTransaction final : Action<confirm_transaction, std::nullopt_t> {
+    explicit ConfirmTransaction(Handler&& promise, td::uint64 transaction_id, const td::Ed25519::PrivateKey& private_key);
+
+    static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
+    auto create_body() -> td::Result<EncodedBody> final;
+    auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return false; }
+
+    td::uint64 transaction_id_;
+    td::Ed25519::PrivateKey private_key_;
+};
 
 struct IsConfirmed final : Action<is_confirmed, bool> {
     explicit IsConfirmed(Handler&& promise, td::uint32 mask, td::uint8 index);
