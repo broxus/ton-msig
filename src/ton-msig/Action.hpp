@@ -11,6 +11,10 @@ using EncodedBody = std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>;
 struct ActionBase {
     virtual auto create_body() -> td::Result<EncodedBody> = 0;
     virtual auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status = 0;
+    virtual void handle_error(td::Status error) = 0;
+
+    [[nodiscard]] virtual auto created_at() const -> td::uint64 { return 0u; }
+    [[nodiscard]] virtual auto expires_at() const -> td::uint32 { return std::numeric_limits<td::uint32>::max(); }
     [[nodiscard]] virtual auto is_get_method() const -> bool = 0;
 
     template <typename T>
@@ -37,6 +41,8 @@ struct Action : ActionBase {
 
     explicit Action(td::Promise<R>&& promise)
         : promise(std::move(promise)){};
+
+    void handle_error(td::Status error) final { promise.set_error(error.move_as_error()); }
 
     td::Promise<R> promise;
 };
@@ -74,6 +80,8 @@ enum { submit_transaction, confirm_transaction, is_confirmed, get_parameters, ge
 struct SubmitTransaction final : Action<submit_transaction, td::uint64> {
     explicit SubmitTransaction(
         Handler&& promise,
+        td::uint64 time,
+        td::uint32 expire,
         const block::StdAddress& dest,
         const td::BigInt256& value,
         bool bounce,
@@ -84,8 +92,13 @@ struct SubmitTransaction final : Action<submit_transaction, td::uint64> {
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
+    [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
+    [[nodiscard]] auto expires_at() const -> td::uint32 final { return expire_; }
     [[nodiscard]] auto is_get_method() const -> bool final { return false; }
 
+    td::uint64 time_;
+    td::uint32 expire_;
     block::StdAddress dest_;
     td::BigInt256 value_;
     bool bounce_;
@@ -95,13 +108,18 @@ struct SubmitTransaction final : Action<submit_transaction, td::uint64> {
 };
 
 struct ConfirmTransaction final : Action<confirm_transaction, std::nullopt_t> {
-    explicit ConfirmTransaction(Handler&& promise, td::uint64 transaction_id, const td::Ed25519::PrivateKey& private_key);
+    explicit ConfirmTransaction(Handler&& promise, td::uint64 time, td::uint32 expire, td::uint64 transaction_id, const td::Ed25519::PrivateKey& private_key);
 
     static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
+    [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
+    [[nodiscard]] auto expires_at() const -> td::uint32 final { return expire_; }
     [[nodiscard]] auto is_get_method() const -> bool final { return false; }
 
+    td::uint64 time_;
+    td::uint32 expire_;
     td::uint64 transaction_id_;
     td::Ed25519::PrivateKey private_key_;
 };
@@ -112,6 +130,7 @@ struct IsConfirmed final : Action<is_confirmed, bool> {
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 
     td::uint32 mask_{};
@@ -124,6 +143,7 @@ struct GetParameters final : Action<get_parameters, Parameters> {
     static auto output_type() -> std::vector<ftabi::ParamRef>;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
@@ -133,6 +153,7 @@ struct GetTransaction final : Action<get_transaction, Transaction> {
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 
     td::uint64 transaction_id_;
@@ -144,6 +165,7 @@ struct GetTransactions final : Action<get_transactions, std::vector<Transaction>
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
@@ -153,6 +175,7 @@ struct GetTransactionIds final : Action<get_transaction_ids, std::vector<td::uin
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
@@ -162,6 +185,7 @@ struct GetCustodians final : Action<get_custodians, std::vector<Custodian>> {
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 

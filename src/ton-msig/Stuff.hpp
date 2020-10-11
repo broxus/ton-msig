@@ -1,5 +1,7 @@
 #pragma once
 
+#include <td/actor/actor.h>
+
 #include <cassert>
 #include <variant>
 
@@ -35,14 +37,6 @@ struct is_std_vector : std::false_type {
 template <typename T, typename A>
 struct is_std_vector<std::vector<T, A>> : std::true_type {
 };
-
-template <typename Type, typename... Types>
-[[nodiscard]] inline Type& get(std::variant<Types...>& value)
-{
-    const auto result = std::get_if<Type>(&value);
-    assert(result != 0);
-    return *result;
-}
 
 template <typename T>
 auto move_copy(const T& value) -> T

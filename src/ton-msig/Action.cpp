@@ -105,6 +105,8 @@ auto decode_custodian(const ValueRef& value) -> Custodian
 
 SubmitTransaction::SubmitTransaction(
     Action::Handler&& promise,
+    td::uint64 time,
+    td::uint32 expire,
     const block::StdAddress& dest,
     const td::BigInt256& value,
     bool bounce,
@@ -112,6 +114,8 @@ SubmitTransaction::SubmitTransaction(
     td::Ref<vm::Cell> payload,
     const td::Ed25519::PrivateKey& private_key)
     : Action{std::move(promise)}
+    , time_{time}
+    , expire_{expire}
     , dest_{dest}
     , value_{value}
     , bounce_{bounce}
@@ -132,9 +136,10 @@ auto SubmitTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRef
     static auto input_params = make_params(ParamAddress{"dest"}, ParamUint{"value", 128}, ParamBool{"bounce"}, ParamBool{"allBalance"}, ParamCell{"payload"});
     static auto function = td::Ref{Function{"submitTransaction", make_header_params(), move_copy(input_params), {output_type()}}};
 
-    TRY_RESULT(public_key, private_key_.get_public_key());
+    TRY_RESULT(public_key, private_key_.get_public_key())
 
-    HeaderValues header_values = make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()));
+    HeaderValues header_values =
+        make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()), make_value(ParamTime{}, time_), make_value(ParamExpire{}, expire_));
     InputValues input_values{
         make_value<ValueAddress>(input_params[0], dest_),
         make_value<ValueInt>(input_params[1], value_),
@@ -157,8 +162,15 @@ auto SubmitTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> 
 
 // confirm_transaction
 
-ConfirmTransaction::ConfirmTransaction(Action::Handler&& promise, td::uint64 transaction_id, const td::Ed25519::PrivateKey& private_key)
+ConfirmTransaction::ConfirmTransaction(
+    Action::Handler&& promise,
+    td::uint64 time,
+    td::uint32 expire,
+    td::uint64 transaction_id,
+    const td::Ed25519::PrivateKey& private_key)
     : Action{std::move(promise)}
+    , time_{time}
+    , expire_{expire}
     , transaction_id_{transaction_id}
     , private_key_{private_key.as_octet_string().copy()}
 {
@@ -167,11 +179,12 @@ ConfirmTransaction::ConfirmTransaction(Action::Handler&& promise, td::uint64 tra
 auto ConfirmTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>>
 {
     static ParamRef input_param{ParamUint{"transactionId", 64}};
-    static auto function = td::Ref{Function{"isConfirmed", make_header_params(), {input_param}, {output_type()}}};
+    static auto function = td::Ref{Function{"confirmTransaction", make_header_params(), {input_param}, {output_type()}}};
 
-    TRY_RESULT(public_key, private_key_.get_public_key());
+    TRY_RESULT(public_key, private_key_.get_public_key())
 
-    HeaderValues header_values = make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()));
+    HeaderValues header_values =
+        make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()), make_value(ParamTime{}, time_), make_value(ParamExpire{}, expire_));
     InputValues input_values{make_value<ValueInt>(input_param, td::make_bigint(transaction_id_))};
 
     FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};

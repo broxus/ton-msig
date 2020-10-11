@@ -19,13 +19,11 @@ namespace app
 using namespace tonlib;
 
 class Wallet final : public td::actor::Actor {
-    struct AccountState {
-        ton::UnixTime sync_utime{};
-        td::int64 balance{};
-        AccountStatus status{};
-        ton::LogicalTime last_transaction_lt{};
-        block::AccountState::Info info;
-        ton::Bits256 last_transaction_hash;
+    enum class State {
+        calling_method_local,
+        calling_method_remote,
+        waiting_transaction,
+        waiting_transaction_sleep,
     };
 
 public:
@@ -52,25 +50,49 @@ public:
 
 private:
     void start_up() final;
+    void loop() final;
 
-    auto process_result() -> td::Status;
-
+    void get_last_block_state();
     void got_last_block_state(lite_api_ptr<lite_api::liteServer_masterchainInfo>&& last_block_state);
+
+    void get_account_state();
     void got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&& account_state);
+
+    void get_last_transaction();
+    void got_last_transaction(lite_api_ptr<lite_api::liteServer_transactionList>&& transactions_list);
+
+    auto run_local() -> td::Status;
+    auto run_remote() -> td::Status;
+
+    void send_message(td::BufferSlice&& message);
+    void sent_message(lite_api_ptr<lite_api::liteServer_sendMsgStatus>&& send_msg_status);
+
+    auto found_transaction(block::gen::Transaction::Record&& transaction) -> td::Status;
 
     void hangup() final { check(TonlibError::Cancelled()); }
 
-    void check_finished();
     void check(td::Status status);
 
     td::actor::ActorShared<> parent_;
     ExtClient client_;
-    td::int32 pending_queries_ = 0;
 
+    State state_{};
     int action_{};
     block::StdAddress addr_;
     ton::BlockIdExt last_block_id_{};
-    AccountState account_state_{};
+    block::AccountState::Info account_info_{};
+
+    ton::LogicalTime first_transaction_lt_{};
+    ton::Bits256 first_transaction_hash_{};
+
+    ton::LogicalTime last_transaction_lt_{};
+    ton::Bits256 last_transaction_hash_{};
+
+    td::uint32 created_at_{};
+    td::uint32 expires_at_{};
+
+    ftabi::FunctionRef function_{};
+    vm::CellHash message_hash_{};
 
     std::unique_ptr<ActionBase> context_{};
 };
