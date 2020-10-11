@@ -30,7 +30,7 @@ private:
             Wallet::Action<T>{},
             addr,
             std::move(promise),
-            std::forward(args)...);
+            std::forward<Args>(args)...);
     }
 
     auto get_client_ref() -> tonlib::ExtClientRef;

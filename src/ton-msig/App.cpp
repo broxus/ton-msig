@@ -37,20 +37,22 @@ void App::start_up()
     block::StdAddress target_addr;
     CHECK(target_addr.parse_addr("0:ac8016e6a27436d0c5fdac85e2fdee11c8d900dba34bb92949cee53f42a6f45b"))
 
-    make_request<msig::GetParameters>(target_addr, [this](td::Result<msig::GetParameters::Result> R) {
-        if (R.is_error()) {
-            LOG(ERROR) << R.move_as_error().message();
+    make_request<msig::GetTransaction>(
+        target_addr,
+        [this](td::Result<msig::GetTransaction::Result> R) {
+            if (R.is_error()) {
+                LOG(ERROR) << R.move_as_error().message();
+                hangup();
+                return;
+            }
+            else {
+                auto transaction = R.move_as_ok();
+                LOG(WARNING) << "Id: " << transaction.id;
+                LOG(WARNING) << "Value: " << transaction.value.to_dec_string();
+            }
             hangup();
-            return;
-        }
-        else {
-            auto parameters = R.move_as_ok();
-            LOG(WARNING) << "max queued tx: " << parameters.max_custodian_count << "\nmax custodian count: " << parameters.max_custodian_count
-                         << "\nexpiration time: " << parameters.expiration_time << "\nmin_value " << parameters.min_value.to_dec_string()
-                         << "\nrequired txn confirms: " << parameters.required_txn_confirms;
-        }
-        hangup();
-    });
+        },
+        6882135947706468737u);
 }
 
 auto App::get_client_ref() -> tonlib::ExtClientRef

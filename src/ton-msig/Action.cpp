@@ -20,21 +20,6 @@ auto empty_function_call() -> FunctionCallRef
 }
 
 template <typename T>
-auto empty_function(const char* name) -> FunctionRef
-{
-    static td::Ref<ftabi::Function> function = td::Ref{Function{name, make_header_params(), {}, {T::output_type()}}};
-    return function;
-}
-
-template <typename T>
-auto create_function_body(const char* name, FunctionCallRef&& call = empty_function_call()) -> td::Result<EncodedBody>
-{
-    auto function = empty_function<T>(name);
-    TRY_RESULT(body, function->encode_input(call))
-    return std::make_pair(function, std::move(body));
-}
-
-template <typename T>
 auto check_output(const std::vector<ftabi::ValueRef>& output) -> td::Status
 {
     constexpr td::Slice INVALID_OUTPUT = "invalid output";
@@ -57,6 +42,24 @@ auto check_output(const std::vector<ftabi::ValueRef>& output) -> td::Status
     }
 
     return td::Status::OK();
+}
+
+auto transaction_param() -> ParamTuple
+{
+    return ParamTuple{
+        "transaction",
+        ParamUint{"id", 64},
+        ParamUint{"confirmationsMask", 32},
+        ParamUint{"signsRequired", 8},
+        ParamUint{"signsReceived", 8},
+        ParamUint{"creator", 256},
+        ParamUint{"index", 8},
+        ParamAddress{"dest"},
+        ParamUint{"value", 128},
+        ParamUint{"sendFlags", 16},
+        ParamCell{"payload"},
+        ParamBool{"bounce"},
+    };
 }
 
 auto decode_parameters(const std::vector<ValueRef>& values) -> Parameters
@@ -100,18 +103,37 @@ auto decode_custodian(const ValueRef& value) -> Custodian
 
 // is_confirmed
 
-IsConfirmed::IsConfirmed(Action::Handler&& promise)
+IsConfirmed::IsConfirmed(Action::Handler&& promise, td::uint32 mask, td::uint8 index)
     : Action{std::move(promise)}
+    , mask_{mask}
+    , index_{index}
 {
+}
+
+auto IsConfirmed::output_type() -> ftabi::ParamRef
+{
+    static ParamRef param{ParamBool{"confirmed"}};
+    return param;
 }
 
 auto IsConfirmed::create_body() -> td::Result<EncodedBody>
 {
-    return td::Result<EncodedBody>();
+    static auto input_params = make_params(ParamUint{"mask", 32}, ParamUint{"index", 8});
+    static auto function = td::Ref{Function{"isConfirmed", make_header_params(), move_copy(input_params), {output_type()}}};
+
+    FunctionCallRef call{FunctionCall{
+        {make_value<ValueInt>(input_params[0], td::make_bigint(mask_)),  //
+         make_value<ValueInt>(input_params[1], td::make_bigint(index_))}}};
+
+    TRY_RESULT(body, function->encode_input(call))
+    return std::make_pair(function, std::move(body));
 }
 
 auto IsConfirmed::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
 {
+    TRY_STATUS(check_output<IsConfirmed>(result))
+    promise.set_result(result[0]->as<ValueBool>().value);
+    return td::Status::OK();
 }
 
 // get_parameters
@@ -134,12 +156,13 @@ auto GetParameters::output_type() -> std::vector<ftabi::ParamRef>
 
 auto GetParameters::create_body() -> td::Result<EncodedBody>
 {
-    return create_function_body<GetParameters>("getParameters");
+    static auto function = td::Ref{Function{"getParameters", make_header_params(), {}, {output_type()}}};
+    TRY_RESULT(body, function->encode_input(empty_function_call()))
+    return std::make_pair(function, std::move(body));
 }
 
 auto GetParameters::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
 {
-    LOG(WARNING) << "Result size: " << result.size();
     TRY_STATUS(check_output<GetParameters>(result))
     promise.set_result(decode_parameters(result));
     return td::Status::OK();
@@ -153,16 +176,25 @@ GetTransaction::GetTransaction(Action::Handler&& promise, td::uint64 transaction
 {
 }
 
+auto GetTransaction::output_type() -> ftabi::ParamRef
+{
+    static ParamRef param{transaction_param()};
+    return param;
+}
+
 auto GetTransaction::create_body() -> td::Result<EncodedBody>
 {
-    return create_function_body<GetTransaction>(
-        "getTransaction",
-        FunctionCallRef{FunctionCall{{make_value(ParamUint{"id", 64}, td::make_bigint(transaction_id_))}}});
+    static auto function = td::Ref{Function{"getTransaction", make_header_params(), make_params(ParamUint{"id", 64}), {output_type()}}};
+
+    auto call = FunctionCallRef{FunctionCall{{make_value(ParamUint{"id", 64}, td::make_bigint(transaction_id_))}}};
+
+    TRY_RESULT(body, function->encode_input(call))
+    return std::make_pair(function, std::move(body));
 }
 
 auto GetTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
 {
-    TRY_STATUS(check_output<GetTransactions>(result))
+    TRY_STATUS(check_output<GetTransaction>(result))
     promise.set_result(decode_transaction(result[0]));
     return td::Status::OK();
 }
@@ -176,29 +208,15 @@ GetTransactions::GetTransactions(Action::Handler&& promise)
 
 auto GetTransactions::output_type() -> ftabi::ParamRef
 {
-    static ParamRef param{ParamArray{
-        "transactions",
-        ParamTuple{
-            "transaction",
-            ParamUint{"id", 64},
-            ParamUint{"confirmationsMask", 32},
-            ParamUint{"signsRequired", 8},
-            ParamUint{"signsReceived", 8},
-            ParamUint{"creator", 256},
-            ParamUint{"index", 8},
-            ParamAddress{"dest"},
-            ParamUint{"value", 128},
-            ParamUint{"sendFlags", 16},
-            ParamCell{"payload"},
-            ParamBool{"bounce"},
-        }}};
-
+    static ParamRef param{ParamArray{"transactions", transaction_param()}};
     return param;
 }
 
 auto GetTransactions::create_body() -> td::Result<EncodedBody>
 {
-    return create_function_body<GetTransactions>("getTransactions");
+    static auto function = td::Ref{Function{"getTransactions", make_header_params(), {}, {output_type()}}};
+    TRY_RESULT(body, function->encode_input(empty_function_call()))
+    return std::make_pair(function, std::move(body));
 }
 
 auto GetTransactions::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -231,7 +249,9 @@ auto GetTransactionIds::output_type() -> ftabi::ParamRef
 
 auto GetTransactionIds::create_body() -> td::Result<EncodedBody>
 {
-    return create_function_body<GetTransactionIds>("getTransactionIds");
+    static auto function = td::Ref{Function{"getTransactionIds", make_header_params(), {}, {output_type()}}};
+    TRY_RESULT(body, function->encode_input(empty_function_call()))
+    return std::make_pair(function, std::move(body));
 }
 
 auto GetTransactionIds::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -269,7 +289,9 @@ auto GetCustodians::output_type() -> ftabi::ParamRef
 
 auto GetCustodians::create_body() -> td::Result<EncodedBody>
 {
-    return create_function_body<GetCustodians>("getCustodians");
+    static auto function = td::Ref{Function{"getCustodians", make_header_params(), {}, {output_type()}}};
+    TRY_RESULT(body, function->encode_input(empty_function_call()))
+    return std::make_pair(function, std::move(body));
 }
 
 auto GetCustodians::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status

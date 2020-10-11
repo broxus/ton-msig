@@ -11,6 +11,7 @@ using EncodedBody = std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>;
 struct ActionBase {
     virtual auto create_body() -> td::Result<EncodedBody> = 0;
     virtual auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status = 0;
+    virtual auto is_get_method() const -> bool = 0;
 };
 
 template <int id_, typename R>
@@ -57,10 +58,15 @@ struct Custodian {
 enum { submit_transaction, confirm_transaction, is_confirmed, get_parameters, get_transaction, get_transaction_ids, get_transactions, get_custodians };
 
 struct IsConfirmed final : Action<is_confirmed, bool> {
-    explicit IsConfirmed(Handler&& promise);
+    explicit IsConfirmed(Handler&& promise, td::uint32 mask, td::uint8 index);
 
+    static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return true; };
+
+    td::uint32 mask_{};
+    td::uint8 index_{};
 };
 
 struct GetParameters final : Action<get_parameters, Parameters> {
@@ -69,6 +75,7 @@ struct GetParameters final : Action<get_parameters, Parameters> {
     static auto output_type() -> std::vector<ftabi::ParamRef>;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
 struct GetTransaction final : Action<get_transaction, Transaction> {
@@ -77,6 +84,7 @@ struct GetTransaction final : Action<get_transaction, Transaction> {
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 
     td::uint64 transaction_id_;
 };
@@ -87,6 +95,7 @@ struct GetTransactions final : Action<get_transactions, std::vector<Transaction>
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
 struct GetTransactionIds final : Action<get_transaction_ids, std::vector<td::uint64>> {
@@ -95,6 +104,7 @@ struct GetTransactionIds final : Action<get_transaction_ids, std::vector<td::uin
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
 struct GetCustodians final : Action<get_custodians, std::vector<Custodian>> {
@@ -103,6 +113,7 @@ struct GetCustodians final : Action<get_custodians, std::vector<Custodian>> {
     static auto output_type() -> ftabi::ParamRef;
     auto create_body() -> td::Result<EncodedBody> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+    [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
 }  // namespace msig
