@@ -5,6 +5,7 @@
 #include <tonlib/keys/Mnemonic.h>
 
 #include <CLI/CLI.hpp>
+#include <cppcodec/hex_lower.hpp>
 #include <iostream>
 
 #include "App.hpp"
@@ -15,6 +16,16 @@ static auto now_ms() -> td::uint64
 {
     const auto duration = std::chrono::system_clock::now().time_since_epoch();
     return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+}
+
+template <typename T>
+static auto check_result(td::Result<T>&& result, const std::string& prefix = "") -> T
+{
+    if (result.is_error()) {
+        std::cerr << result.move_as_error_prefix(prefix).message().c_str() << std::endl;
+        std::exit(1);
+    }
+    return result.move_as_ok();
 }
 
 static auto is_mnemonics(const std::string& str) -> bool
@@ -179,14 +190,7 @@ int main(int argc, char** argv)
     td::BufferSlice global_config{MAINNET_CONFIG_JSON, std::size(MAINNET_CONFIG_JSON)};
     cmd.add_option_function<std::string>(
            "-c,--config",
-           [&](const std::string& path) {
-               auto path_r = td::read_file(path);
-               if (path_r.is_error()) {
-                   std::cerr << path_r.move_as_error().message().c_str() << std::endl;
-                   std::exit(1);
-               }
-               global_config = path_r.move_as_ok();
-           },
+           [&](const std::string& path) { global_config = check_result(td::read_file(path)); },
            "Path to global config")
         ->check(CLI::ExistingFile);
 
@@ -204,14 +208,7 @@ int main(int argc, char** argv)
         return subcommand
             ->add_option_function<std::string>(
                 "-s,--sign",
-                [&](const std::string& key_data) {
-                    auto key_r = load_key(key_data);
-                    if (key_r.is_error()) {
-                        std::cerr << key_r.move_as_error().message().c_str() << std::endl;
-                        std::exit(1);
-                    }
-                    key = key_r.move_as_ok();
-                },
+                [&](const std::string& key_data) { key = check_result(load_key(key_data)); },
                 "Signature for remote calls")
             ->check(CLI::ExistingFile | MnemonicsValidator{})
             ->required();
@@ -221,6 +218,18 @@ int main(int argc, char** argv)
     const auto add_force_local_option = [&force_local](CLI::App* subcommand) -> CLI::Option* {
         return subcommand->add_flag("--local", force_local, "Force local execution");
     };
+
+    cmd.add_subcommand("genkeypair", "Generate new keypair")->callback([&] {
+        const auto private_key = ton::privkeys::Ed25519::random().export_key();
+        const auto public_key = check_result(private_key.get_public_key());
+
+        std::cout << "{\n"
+                  << R"(  "public": ")" << cppcodec::hex_lower::encode(public_key.as_octet_string()) << "\",\n"
+                  << R"(  "secret": ")" << cppcodec::hex_lower::encode(private_key.as_octet_string()) << "\"\n"
+                  << "}" << std::endl;
+
+        std::exit(0);
+    });
 
     auto* cmd_submit_transaction = cmd.add_subcommand("submitTransaction", "Create new transaction")->needs(address_option);
     cmd_submit_transaction

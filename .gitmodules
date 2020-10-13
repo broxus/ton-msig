@@ -4,3 +4,6 @@
 [submodule "extlibs/CLI11"]
 	path = extlibs/CLI11
 	url = https://github.com/CLIUtils/CLI11.git
+[submodule "extlibs/cppcodec"]
+	path = extlibs/cppcodec
+	url = https://github.com/tplgy/cppcodec.git
