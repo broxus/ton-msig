@@ -6,11 +6,27 @@
 
 namespace app
 {
+namespace
+{
+auto now_ms() -> td::uint64
+{
+    const auto duration = std::chrono::system_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+}
+
+}  // namespace
+
 App::App(App::Options&& options)
     : options_{std::move(options)}
 {
 }
 App::~App() = default;
+
+void App::make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action)
+{
+    auto id = actor_id_++;
+    actors_[id] = td::actor::create_actor<Wallet>("Wallet", client_.get_client(), actor_shared(this, id), addr, std::move(action));
+}
 
 void App::start_up()
 {
@@ -33,26 +49,6 @@ void App::start_up()
     init_last_config();
 
     client_.set_client(get_client_ref());
-
-    block::StdAddress target_addr;
-    CHECK(target_addr.parse_addr("0:ac8016e6a27436d0c5fdac85e2fdee11c8d900dba34bb92949cee53f42a6f45b"))
-
-    make_request<msig::GetTransaction>(
-        target_addr,
-        [this](td::Result<msig::GetTransaction::Result> R) {
-            if (R.is_error()) {
-                LOG(ERROR) << R.move_as_error().message();
-                hangup();
-                return;
-            }
-            else {
-                auto transaction = R.move_as_ok();
-                LOG(WARNING) << "Id: " << transaction.id;
-                LOG(WARNING) << "Value: " << transaction.value.to_dec_string();
-            }
-            hangup();
-        },
-        6882135947706468737u);
 }
 
 auto App::get_client_ref() -> tonlib::ExtClientRef

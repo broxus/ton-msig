@@ -20,9 +20,12 @@ set(_PROJECT_VERSION
 
 project(${_PROJECT_NAME} LANGUAGES ${_PROJECT_LANGUAGE} VERSION ${_PROJECT_VERSION})
 
+option(MSIG_WITH_API "Use \"ON\" to build with integrated server." OFF)
+
 # Extlibs
 set(WITH_GFLAGS OFF)
 add_subdirectory(${PROJECT_ROOT_DIR}/extlibs/ton EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_ROOT_DIR}/extlibs/CLI11 EXCLUDE_FROM_ALL)
 
 foreach (SUBPROJ ${SUBPROJECT_LIST})
     add_subdirectory(${SUBPROJ})

@@ -32,12 +32,10 @@ struct ActionBase {
     }
 };
 
-template <int id_, typename R>
+template <typename R>
 struct Action : ActionBase {
     using Result = R;
     using Handler = td::Promise<R>;
-
-    constexpr static auto id = id_;
 
     explicit Action(td::Promise<R>&& promise)
         : promise(std::move(promise)){};
@@ -75,9 +73,7 @@ struct Custodian {
     td::BigInt256 pubkey{};
 };
 
-enum { submit_transaction, confirm_transaction, is_confirmed, get_parameters, get_transaction, get_transaction_ids, get_transactions, get_custodians };
-
-struct SubmitTransaction final : Action<submit_transaction, td::uint64> {
+struct SubmitTransaction final : Action<td::uint64> {
     explicit SubmitTransaction(
         Handler&& promise,
         td::uint64 time,
@@ -107,7 +103,7 @@ struct SubmitTransaction final : Action<submit_transaction, td::uint64> {
     td::Ed25519::PrivateKey private_key_;
 };
 
-struct ConfirmTransaction final : Action<confirm_transaction, std::nullopt_t> {
+struct ConfirmTransaction final : Action<std::nullopt_t> {
     explicit ConfirmTransaction(Handler&& promise, td::uint64 time, td::uint32 expire, td::uint64 transaction_id, const td::Ed25519::PrivateKey& private_key);
 
     static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
@@ -124,7 +120,7 @@ struct ConfirmTransaction final : Action<confirm_transaction, std::nullopt_t> {
     td::Ed25519::PrivateKey private_key_;
 };
 
-struct IsConfirmed final : Action<is_confirmed, bool> {
+struct IsConfirmed final : Action<bool> {
     explicit IsConfirmed(Handler&& promise, td::uint32 mask, td::uint8 index);
 
     static auto output_type() -> ftabi::ParamRef;
@@ -133,11 +129,11 @@ struct IsConfirmed final : Action<is_confirmed, bool> {
 
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 
-    td::uint32 mask_{};
-    td::uint8 index_{};
+    td::uint32 mask_;
+    td::uint8 index_;
 };
 
-struct GetParameters final : Action<get_parameters, Parameters> {
+struct GetParameters final : Action<Parameters> {
     explicit GetParameters(Handler&& promise);
 
     static auto output_type() -> std::vector<ftabi::ParamRef>;
@@ -147,7 +143,7 @@ struct GetParameters final : Action<get_parameters, Parameters> {
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
-struct GetTransaction final : Action<get_transaction, Transaction> {
+struct GetTransaction final : Action<Transaction> {
     explicit GetTransaction(Handler&& promise, td::uint64 transaction_id);
 
     static auto output_type() -> ftabi::ParamRef;
@@ -159,7 +155,7 @@ struct GetTransaction final : Action<get_transaction, Transaction> {
     td::uint64 transaction_id_;
 };
 
-struct GetTransactions final : Action<get_transactions, std::vector<Transaction>> {
+struct GetTransactions final : Action<std::vector<Transaction>> {
     explicit GetTransactions(Handler&& promise);
 
     static auto output_type() -> ftabi::ParamRef;
@@ -169,7 +165,7 @@ struct GetTransactions final : Action<get_transactions, std::vector<Transaction>
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
-struct GetTransactionIds final : Action<get_transaction_ids, std::vector<td::uint64>> {
+struct GetTransactionIds final : Action<std::vector<td::uint64>> {
     explicit GetTransactionIds(Handler&& promise);
 
     static auto output_type() -> ftabi::ParamRef;
@@ -179,7 +175,7 @@ struct GetTransactionIds final : Action<get_transaction_ids, std::vector<td::uin
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
-struct GetCustodians final : Action<get_custodians, std::vector<Custodian>> {
+struct GetCustodians final : Action<std::vector<Custodian>> {
     explicit GetCustodians(Handler&& promise);
 
     static auto output_type() -> ftabi::ParamRef;

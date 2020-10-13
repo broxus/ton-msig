@@ -1,3 +1,6 @@
 [submodule "extlibs/ton"]
 	path = extlibs/ton
 	url = https://github.com/broxus/ton.git
+[submodule "extlibs/CLI11"]
+	path = extlibs/CLI11
+	url = https://github.com/CLIUtils/CLI11.git

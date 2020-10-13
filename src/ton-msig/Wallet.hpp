@@ -27,23 +27,10 @@ class Wallet final : public td::actor::Actor {
     };
 
 public:
-    template <typename T>
-    struct Action {
-        static_assert(std::is_base_of_v<ActionBase, T>);
-    };
-
-    template <typename T, typename... Args>
-    Wallet(
-        ExtClientRef ext_client_ref,
-        td::actor::ActorShared<> parent,
-        Action<T>,
-        const block::StdAddress& addr,
-        typename T::Handler&& promise,
-        Args&&... args)
+    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context)
         : parent_{std::move(parent)}
         , addr_{addr}
-        , action_{T::id}
-        , context_{std::make_unique<T>(std::move(promise), std::forward<Args>(args)...)}
+        , context_{std::move(context)}
     {
         client_.set_client(std::move(ext_client_ref));
     }
@@ -77,7 +64,6 @@ private:
     ExtClient client_;
 
     State state_{};
-    int action_{};
     block::StdAddress addr_;
     ton::BlockIdExt last_block_id_{};
     block::AccountState::Info account_info_{};

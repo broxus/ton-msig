@@ -9,29 +9,16 @@ namespace app
 class App final : public td::actor::Actor {
 public:
     struct Options {
-        td::uint32 thread_count{2};
         td::BufferSlice config{};
     };
 
     explicit App(Options&& options);
     ~App() final;
 
+    void make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action);
+
 private:
     void start_up() final;
-
-    template <typename T, typename... Args>
-    auto make_request(const block::StdAddress& addr, td::Promise<typename T::Result>&& promise, Args&&... args)
-    {
-        auto id = actor_id_++;
-        actors_[id] = td::actor::create_actor<Wallet>(  //
-            "Wallet",
-            client_.get_client(),
-            actor_shared(this, id),
-            Wallet::Action<T>{},
-            addr,
-            std::move(promise),
-            std::forward<Args>(args)...);
-    }
 
     auto get_client_ref() -> tonlib::ExtClientRef;
     void init_ext_client();
