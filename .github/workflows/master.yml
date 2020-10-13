@@ -1,0 +1,35 @@
+on: [push, pull_request]
+
+name: master
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Setup Dependencies
+        run: |
+          for apt_file in `grep -lr microsoft /etc/apt/sources.list.d/`; do sudo rm $apt_file; done
+          sudo apt-get update -y -qq
+          sudo apt-get install -y git gcc g++ make libssl-dev zlib1g-dev wget
+          wget -qO- "https://cmake.org/files/v3.18/cmake-3.18.4-Linux-x86_64.tar.gz" | sudo tar --strip-components=1 -xz -C /usr/local
+
+      - name: Configure Project
+        run: |
+          git submodule update --init --recursive
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DTON_USE_ROCKSDB=OFF \
+            -DMSIG_WITH_API=OFF \
+            -DTON_USE_GDB=OFF \
+            -DTON_USE_STACKTRACE=OFF
+
+      - name: Build Project
+        working-directory: ./build
+        run: |
+          cmake --build . --target ton-msig -- -j2
