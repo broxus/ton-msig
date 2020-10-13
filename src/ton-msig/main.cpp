@@ -199,6 +199,7 @@ int main(int argc, char** argv)
     bool bounce = true;
     block::StdAddress dest{};
     td::BigInt256 value{};
+    td::Ref<vm::Cell> payload{vm::CellBuilder{}.finalize()};
     td::uint64 transaction_id{};
     td::uint32 mask{};
     td::uint8 index{};
@@ -248,6 +249,16 @@ int main(int argc, char** argv)
         ->transform(TonValidator{});
     cmd_submit_transaction->add_option("--all-balance", all_balance, "Send all balance and delete contract", true);
     cmd_submit_transaction->add_option("--bounce", bounce, "Return message back when it is send to uninitialized address", true);
+    cmd_submit_transaction->add_option_function<std::string>(
+        "--payload",
+        [&](const std::string& str) {
+            if (str.empty()) {
+                return;
+            }
+            const auto decoded = check_result(td::base64_decode(str), "Failed to deserialize payload");
+            payload = check_result(vm::std_boc_deserialize(decoded));
+        },
+        "Serialized bag of cells of message body");
     add_signature_option(cmd_submit_transaction);
     add_force_local_option(cmd_submit_transaction);
     cmd_submit_transaction->callback([&] {
@@ -270,7 +281,7 @@ int main(int argc, char** argv)
                 value,
                 bounce,
                 all_balance,
-                vm::CellBuilder{}.finalize(),
+                payload,
                 *key);
         };
     });
