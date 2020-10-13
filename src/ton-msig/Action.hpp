@@ -76,6 +76,7 @@ struct Custodian {
 struct SubmitTransaction final : Action<td::uint64> {
     explicit SubmitTransaction(
         Handler&& promise,
+        bool force_local,
         td::uint64 time,
         td::uint32 expire,
         const block::StdAddress& dest,
@@ -91,8 +92,9 @@ struct SubmitTransaction final : Action<td::uint64> {
 
     [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
     [[nodiscard]] auto expires_at() const -> td::uint32 final { return expire_; }
-    [[nodiscard]] auto is_get_method() const -> bool final { return false; }
+    [[nodiscard]] auto is_get_method() const -> bool final { return force_local_; }
 
+    bool force_local_;
     td::uint64 time_;
     td::uint32 expire_;
     block::StdAddress dest_;
@@ -104,7 +106,13 @@ struct SubmitTransaction final : Action<td::uint64> {
 };
 
 struct ConfirmTransaction final : Action<std::nullopt_t> {
-    explicit ConfirmTransaction(Handler&& promise, td::uint64 time, td::uint32 expire, td::uint64 transaction_id, const td::Ed25519::PrivateKey& private_key);
+    explicit ConfirmTransaction(
+        Handler&& promise,
+        bool force_local,
+        td::uint64 time,
+        td::uint32 expire,
+        td::uint64 transaction_id,
+        const td::Ed25519::PrivateKey& private_key);
 
     static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
     auto create_body() -> td::Result<EncodedBody> final;
@@ -112,8 +120,9 @@ struct ConfirmTransaction final : Action<std::nullopt_t> {
 
     [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
     [[nodiscard]] auto expires_at() const -> td::uint32 final { return expire_; }
-    [[nodiscard]] auto is_get_method() const -> bool final { return false; }
+    [[nodiscard]] auto is_get_method() const -> bool final { return force_local_; }
 
+    bool force_local_;
     td::uint64 time_;
     td::uint32 expire_;
     td::uint64 transaction_id_;

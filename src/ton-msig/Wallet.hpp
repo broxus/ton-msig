@@ -27,13 +27,7 @@ class Wallet final : public td::actor::Actor {
     };
 
 public:
-    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context)
-        : parent_{std::move(parent)}
-        , addr_{addr}
-        , context_{std::move(context)}
-    {
-        client_.set_client(std::move(ext_client_ref));
-    }
+    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context);
 
 private:
     void start_up() final;
@@ -56,9 +50,10 @@ private:
 
     auto found_transaction(block::gen::Transaction::Record&& transaction) -> td::Status;
 
-    void hangup() final { check(TonlibError::Cancelled()); }
+    void hangup() final { finish(TonlibError::Cancelled()); }
 
     void check(td::Status status);
+    void finish(td::Status status);
 
     td::actor::ActorShared<> parent_;
     ExtClient client_;

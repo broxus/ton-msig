@@ -41,9 +41,14 @@ endfunction()
 # - output file: data.h
 # - variable name declared in output file: DATA
 # - data length: sizeof(DATA)
-# embed_resource("data.dat" "data.h" "DATA")
+# embed_resource("data.dat" "data.h" "DATA" UNSIGNED)
 ####################################################################################################
-function(embed_resource resource_file_name source_file_name variable_name)
+function(embed_resource resource_file_name source_file_name variable_name type)
+    if ("${type}" STREQUAL "SIGNED")
+        set(array_element_type "char")
+    else()
+        set(array_element_type "unsigned char")
+    endif()
 
     file(READ ${resource_file_name} hex_content HEX)
 
@@ -54,7 +59,7 @@ function(embed_resource resource_file_name source_file_name variable_name)
 
     string(REGEX REPLACE ", $" "" content "${content}")
 
-    set(array_definition "static const unsigned char ${variable_name}[] =\n{\n${content}\n};")
+    set(array_definition "static const ${array_element_type} ${variable_name}[] =\n{\n${content}\n};")
 
     set(source "// Auto generated file.\n${array_definition}\n")
 

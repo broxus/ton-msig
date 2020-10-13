@@ -6,21 +6,16 @@
 
 namespace app
 {
-namespace
-{
-auto now_ms() -> td::uint64
-{
-    const auto duration = std::chrono::system_clock::now().time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-}
-
-}  // namespace
-
 App::App(App::Options&& options)
     : options_{std::move(options)}
 {
 }
 App::~App() = default;
+
+void App::close()
+{
+    hangup();
+}
 
 void App::make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action)
 {

@@ -105,6 +105,7 @@ auto decode_custodian(const ValueRef& value) -> Custodian
 
 SubmitTransaction::SubmitTransaction(
     Action::Handler&& promise,
+    bool force_local,
     td::uint64 time,
     td::uint32 expire,
     const block::StdAddress& dest,
@@ -114,6 +115,7 @@ SubmitTransaction::SubmitTransaction(
     td::Ref<vm::Cell> payload,
     const td::Ed25519::PrivateKey& private_key)
     : Action{std::move(promise)}
+    , force_local_{force_local}
     , time_{time}
     , expire_{expire}
     , dest_{dest}
@@ -164,11 +166,13 @@ auto SubmitTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> 
 
 ConfirmTransaction::ConfirmTransaction(
     Action::Handler&& promise,
+    bool force_local,
     td::uint64 time,
     td::uint32 expire,
     td::uint64 transaction_id,
     const td::Ed25519::PrivateKey& private_key)
     : Action{std::move(promise)}
+    , force_local_{force_local}
     , time_{time}
     , expire_{expire}
     , transaction_id_{transaction_id}

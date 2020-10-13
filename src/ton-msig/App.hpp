@@ -16,6 +16,7 @@ public:
     ~App() final;
 
     void make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action);
+    void close();
 
 private:
     void start_up() final;

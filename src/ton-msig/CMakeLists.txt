@@ -22,6 +22,13 @@ set(${SUBPROJ_NAME}_SOURCES
         "App.cpp"
         "Wallet.cpp")
 
+include(BuildHelpers)
+set(${SUBPROJ_NAME}_EMBED_DIR ${CMAKE_CURRENT_BINARY_DIR}/res)
+embed_resource("${RESOURCE_DIR}/mainnet.config.json" "${${SUBPROJ_NAME}_EMBED_DIR}/mainnet_config_json.h" MAINNET_CONFIG_JSON SIGNED)
+
+set(${SUBPROJ_NAME}_EMBED
+        "${${SUBPROJ_NAME}_EMBED_DIR}/mainnet_config_json.h")
+
 # ############################################################### #
 # Options ####################################################### #
 # ############################################################### #
@@ -36,7 +43,8 @@ generate_basic_options_executable(${SUBPROJ_NAME})
 set(
         ${SUBPROJ_NAME}_ALL_SRCS
         ${${SUBPROJ_NAME}_HEADERS}
-        ${${SUBPROJ_NAME}_SOURCES})
+        ${${SUBPROJ_NAME}_SOURCES}
+        ${${SUBPROJ_NAME}_EMBED})
 
 # ############################################################### #
 # Create target for build ####################################### #
@@ -70,6 +78,7 @@ set_target_properties(
 target_include_directories(
         ${SUBPROJ_NAME}
         PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 target_link_libraries(${SUBPROJ_NAME} PRIVATE
@@ -77,7 +86,7 @@ target_link_libraries(${SUBPROJ_NAME} PRIVATE
 
 if (MSIG_WITH_API)
     target_compile_definitions(${SUBPROJ_NAME} PUBLIC "MSIG_WITH_API")
-endif()
+endif ()
 
 # Size optimizations
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
