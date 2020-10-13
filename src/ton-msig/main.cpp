@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "App.hpp"
+#include "Contract.hpp"
 
 using namespace app;
 
@@ -203,14 +204,16 @@ int main(int argc, char** argv)
     td::uint64 transaction_id{};
     td::uint32 mask{};
     td::uint8 index{};
+    ton::WorkchainId workchain{0};
+    bool gen_addr = false;
 
     std::optional<td::Ed25519::PrivateKey> key;
-    const auto add_signature_option = [&key](CLI::App* subcommand) -> CLI::Option* {
+    const auto add_signature_option = [&key](CLI::App* subcommand, const char* name = "-s,--sign") -> CLI::Option* {
         return subcommand
             ->add_option_function<std::string>(
-                "-s,--sign",
+                name,
                 [&](const std::string& key_data) { key = check_result(load_key(key_data)); },
-                "Signature for remote calls")
+                "Path to keypair file")
             ->check(CLI::ExistingFile | MnemonicsValidator{})
             ->required();
     };
@@ -220,14 +223,23 @@ int main(int argc, char** argv)
         return subcommand->add_flag("--local", force_local, "Force local execution");
     };
 
-    cmd.add_subcommand("genkeypair", "Generate new keypair")->callback([&] {
-        const auto private_key = ton::privkeys::Ed25519::random().export_key();
+    auto* cmd_generate = cmd.add_subcommand("generate", "Generate new keypair");
+    cmd_generate->add_flag("-a,--addr", gen_addr, "Whether to generate an address");
+    cmd_generate->add_option("-w,--workchain", workchain, "Workchain")->check(CLI::Range(-1, 0));
+    add_signature_option(cmd_generate, "-f,--from")->required(false);
+    cmd_generate->callback([&] {
+        const auto from_existing = key.has_value();
+        const auto private_key = from_existing ? std::move(key.value()) : ton::privkeys::Ed25519::random().export_key();
         const auto public_key = check_result(private_key.get_public_key());
 
         std::cout << "{\n"
                   << R"(  "public": ")" << cppcodec::hex_lower::encode(public_key.as_octet_string()) << "\",\n"
-                  << R"(  "secret": ")" << cppcodec::hex_lower::encode(private_key.as_octet_string()) << "\"\n"
-                  << "}" << std::endl;
+                  << R"(  "secret": ")" << cppcodec::hex_lower::encode(private_key.as_octet_string()) << "\"";
+        if (from_existing || gen_addr) {
+            const auto addr = check_result(Contract::generate_addr(public_key));
+            std::cout << ",\n  \"address\": \"" << workchain << ":" << addr.to_hex() << "\"";
+        }
+        std::cout << "\n}" << std::endl;
 
         std::exit(0);
     });

@@ -26,6 +26,7 @@ Options:
   -c,--config TEXT:FILE                   Path to global config
 
 Subcommands:
+  generate                                Generate new keypair
   submitTransaction                       Create new transaction
   confirmTransaction                      Confirm pending transaction
   isConfirmed                             Check if transactions are confirmed

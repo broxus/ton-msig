@@ -12,6 +12,7 @@ set(${SUBPROJ_NAME}_HEADERS
         "Action.hpp"
         "Api.hpp"
         "App.hpp"
+        "Contract.hpp"
         "Stuff.hpp"
         "Wallet.hpp")
 
@@ -20,14 +21,17 @@ set(${SUBPROJ_NAME}_SOURCES
         "Api.cpp"
         "main.cpp"
         "App.cpp"
+        "Contract.cpp"
         "Wallet.cpp")
 
 include(BuildHelpers)
 set(${SUBPROJ_NAME}_EMBED_DIR ${CMAKE_CURRENT_BINARY_DIR}/res)
 embed_resource("${RESOURCE_DIR}/mainnet.config.json" "${${SUBPROJ_NAME}_EMBED_DIR}/mainnet_config_json.h" MAINNET_CONFIG_JSON SIGNED)
+embed_resource("${RESOURCE_DIR}/SafeMultisigWallet.tvc" "${${SUBPROJ_NAME}_EMBED_DIR}/safe_multisig_wallet_tvc.h" SAFE_MULTISIG_WALLET_TVC UNSIGNED)
 
 set(${SUBPROJ_NAME}_EMBED
-        "${${SUBPROJ_NAME}_EMBED_DIR}/mainnet_config_json.h")
+        "${${SUBPROJ_NAME}_EMBED_DIR}/mainnet_config_json.h"
+        "${${SUBPROJ_NAME}_EMBED_DIR}/safe_multisig_wallet_tvc.h")
 
 # ############################################################### #
 # Options ####################################################### #
