@@ -429,12 +429,10 @@ int main(int argc, char** argv)
     scheduler.run_in_context([&] { app = App::create({std::move(global_config)}); });
     scheduler.run_in_context([&] {
         if (action_make_request) {
-            auto request = action_make_request(app.get());
-            td::actor::send_closure(app, &App::make_request, address, std::move(request));
+            td::actor::send_closure(app, &App::make_request, address, action_make_request(app.get()));
         }
         if (action_get_account_info) {
-            auto promise = action_get_account_info(app.get());
-            td::actor::send_closure(app, &App::get_account_info, address, std::move(promise));
+            td::actor::send_closure(app, &App::get_account_info, address, action_get_account_info(app.get()));
         }
         app.release();
     });
