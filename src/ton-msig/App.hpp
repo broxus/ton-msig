@@ -12,8 +12,13 @@ public:
         td::BufferSlice config{};
     };
 
-    explicit App(Options&& options);
-    ~App() final;
+    explicit App(Options&& options)
+        : options_{std::move(options)}
+    {
+    }
+    ~App() final = default;
+
+    [[nodiscard]] static auto create(Options&& options) -> td::actor::ActorOwn<App>;
 
     void make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action);
     void close();

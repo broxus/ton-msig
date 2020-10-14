@@ -4,8 +4,20 @@
 
 namespace app
 {
+Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, AccountInfoHandler&& promise)
+    : parent_{std::move(parent)}
+    , mode_{Mode::get_account_info}
+    , state_{State::getting_account_info}
+    , addr_{addr}
+    , account_info_handler_{std::move(promise)}
+{
+    client_.set_client(std::move(ext_client_ref));
+}
+
 Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context)
     : parent_{std::move(parent)}
+    , mode_{Mode::send_message}
+    , state_{State::getting_account_info}
     , addr_{addr}
     , context_{std::move(context)}
 {
@@ -14,14 +26,6 @@ Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, con
 
 void Wallet::start_up()
 {
-    if (context_->is_get_method()) {
-        state_ = State::calling_method_local;
-    }
-    else {
-        state_ = State::calling_method_remote;
-        created_at_ = context_->created_at();
-        expires_at_ = context_->expires_at();
-    }
     get_last_block_state();
 }
 
@@ -89,7 +93,13 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
     account_info_ = info_r.move_as_ok();
 
     if (account_info_.root.is_null()) {
-        return finish(td::Status::Error("account is empty"));
+        if (mode_ == Mode::get_account_info) {
+            account_info_handler_.set_result(BriefAccountInfo{});
+            return finish(td::Status::OK());
+        }
+        else {
+            return finish(td::Status::Error("account is empty"));
+        }
     }
 
     const auto still_same_transaction = last_transaction_lt_ == account_info_.last_trans_lt &&  //
@@ -101,13 +111,51 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
     LOG(DEBUG) << "previous transaction: " << last_transaction_lt_ << ":" << last_transaction_hash_.to_hex();
 
     switch (state_) {
-        case State::calling_method_local: {
-            return finish(run_local());
-        }
-        case State::calling_method_remote: {
-            first_transaction_lt_ = last_transaction_lt_;
-            first_transaction_hash_ = last_transaction_hash_;
-            return check(run_remote());
+        case State::getting_account_info: {
+            switch (mode_) {
+                case Mode::get_account_info: {
+                    BriefAccountInfo brief_info{
+                        .last_transaction_lt = last_transaction_lt_,  //
+                        .last_transaction_hash = last_transaction_hash_};
+
+                    block::gen::Account::Record_account acc;
+                    block::gen::AccountStorage::Record store;
+                    block::CurrencyCollection balance;
+                    if (tlb::unpack_cell(account_info_.root, acc) && tlb::csr_unpack(acc.storage, store) && balance.unpack(store.balance)) {
+                        brief_info.balance = balance.grams;
+                    }
+
+                    int tag = block::gen::t_AccountState.get_tag(*store.state);
+                    switch (tag) {
+                        case block::gen::AccountState::account_uninit:
+                            brief_info.status = AccountStatus::uninit;
+                            break;
+                        case block::gen::AccountState::account_frozen:
+                            brief_info.status = AccountStatus::frozen;
+                            break;
+                        case block::gen::AccountState::account_active:
+                            brief_info.status = AccountStatus::active;
+                            break;
+                        default:
+                            brief_info.status = AccountStatus::unknown;
+                            break;
+                    }
+
+                    account_info_handler_.set_value(std::move(brief_info));
+                    return finish(td::Status::OK());
+                }
+                case Mode::send_message:
+                    if (context_->is_get_method()) {
+                        return finish(run_local());
+                    }
+                    else {
+                        first_transaction_lt_ = last_transaction_lt_;
+                        first_transaction_hash_ = last_transaction_hash_;
+                        return check(run_remote());
+                    }
+                default:
+                    break;
+            }
         }
         case State::waiting_transaction: {
             if (still_same_transaction && account_info_.gen_utime > expires_at_) {
@@ -124,9 +172,10 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
             return;
         }
         default: {
-            CHECK(false)
+            break;
         }
     }
+    CHECK(false)
 }
 
 void Wallet::get_last_transaction()
@@ -187,7 +236,7 @@ auto Wallet::run_local() -> td::Status
 {
     LOG(DEBUG) << "Run local";
 
-    CHECK(state_ == State::calling_method_local)
+    CHECK(mode_ == Mode::send_message)
     TRY_RESULT(encoded_message, context_->create_message())
     auto [function, state_init, body] = std::move(encoded_message);
 
@@ -199,12 +248,13 @@ auto Wallet::run_remote() -> td::Status
 {
     LOG(DEBUG) << "Run remote";
 
-    CHECK(state_ == State::calling_method_remote)
+    CHECK(mode_ == Mode::send_message)
     TRY_RESULT(encoded_message, context_->create_message())
     auto [function, state_init, body] = std::move(encoded_message);
     function_ = std::move(function);
 
     auto message = ton::GenericAccount::create_ext_message(addr_, state_init, body);
+    expires_at_ = context_->expires_at();
     message_hash_ = message->get_hash();
 
     LOG(DEBUG) << "Message hash: " << message_hash_.to_hex();
@@ -280,7 +330,16 @@ void Wallet::check(td::Status status)
 {
     if (status.is_error()) {
         LOG(DEBUG) << status.message();
-        context_->handle_error(status.move_as_error());
+        switch (mode_) {
+            case Mode::get_account_info:
+                account_info_handler_.set_error(status.move_as_error());
+                break;
+            case Mode::send_message:
+                context_->handle_error(status.move_as_error());
+                break;
+            default:
+                CHECK(false)
+        }
         stop();
     }
 }

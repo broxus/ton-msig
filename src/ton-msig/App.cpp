@@ -6,11 +6,10 @@
 
 namespace app
 {
-App::App(App::Options&& options)
-    : options_{std::move(options)}
+auto App::create(Options&& options) -> td::actor::ActorOwn<App>
 {
+    return td::actor::create_actor<App>("ton-msig", std::move(options));
 }
-App::~App() = default;
 
 void App::close()
 {

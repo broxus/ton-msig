@@ -19,14 +19,28 @@ namespace app
 using namespace tonlib;
 
 class Wallet final : public td::actor::Actor {
+    enum class Mode {
+        get_account_info,
+        send_message,
+    };
+
     enum class State {
-        calling_method_local,
-        calling_method_remote,
+        getting_account_info,
         waiting_transaction,
         waiting_transaction_sleep,
     };
 
 public:
+    struct BriefAccountInfo {
+        AccountStatus status{AccountStatus::uninit};
+        td::RefInt256 balance{};
+        ton::LogicalTime last_transaction_lt{};
+        td::Bits256 last_transaction_hash{};
+    };
+
+    using AccountInfoHandler = td::Promise<BriefAccountInfo>;
+
+    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, AccountInfoHandler&& promise);
     Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context);
 
 private:
@@ -58,6 +72,7 @@ private:
     td::actor::ActorShared<> parent_;
     ExtClient client_;
 
+    Mode mode_{};
     State state_{};
     block::StdAddress addr_;
     ton::BlockIdExt last_block_id_{};
@@ -69,13 +84,13 @@ private:
     ton::LogicalTime last_transaction_lt_{};
     ton::Bits256 last_transaction_hash_{};
 
-    td::uint32 created_at_{};
     td::uint32 expires_at_{};
 
     ftabi::FunctionRef function_{};
     vm::CellHash message_hash_{};
 
     std::unique_ptr<ActionBase> context_{};
+    AccountInfoHandler account_info_handler_{};
 };
 
 }  // namespace app

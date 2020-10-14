@@ -13,12 +13,21 @@
 
 using namespace app;
 
+static struct SharedStatus {
+    void set(int code) { status.store(code); }
+    [[nodiscard]] auto get() const { return status.load(std::memory_order_relaxed); }
+
+private:
+    std::atomic_int status{0};
+} shared_execution_status = {};
+
 template <typename T>
 auto create_handler(td::actor::ActorId<App>&& actor_id, std::function<void(T&&)>&& formatter) -> td::Promise<T>
 {
     return td::PromiseCreator::lambda([actor_id = std::move(actor_id), formatter = std::move(formatter)](td::Result<T> R) {
         if (R.is_error()) {
             std::cerr << R.move_as_error().message().str() << std::endl;
+            shared_execution_status.set(1);
         }
         else {
             formatter(R.move_as_ok());
@@ -57,17 +66,7 @@ int main(int argc, char** argv)
         ->check(CLI::ExistingFile);
 
     // subcommands
-    bool all_balance = false;
-    bool bounce = true;
-    block::StdAddress dest{};
-    td::BigInt256 value{};
-    td::Ref<vm::Cell> payload{vm::CellBuilder{}.finalize()};
-    td::uint64 transaction_id{};
-    td::uint32 mask{};
-    td::uint8 index{};
-    std::vector<td::BigInt256> owners{};
-    td::uint8 req_confirms{1};
-    bool gen_addr = false;
+    //
 
     std::optional<td::Ed25519::PrivateKey> key;
     const auto add_signature_option = [&key](CLI::App* subcommand, const char* name = "-s,--sign") -> CLI::Option* {
@@ -90,7 +89,10 @@ int main(int argc, char** argv)
         return subcommand->add_option("-w,--workchain", workchain, "Workchain")->check(CLI::Range(-1, 0));
     };
 
+    // Subcommand: generate
+
     auto* cmd_generate = cmd.add_subcommand("generate", "Generate new keypair");
+    bool gen_addr = false;
     cmd_generate->add_flag("-a,--addr", gen_addr, "Whether to generate an address");
     add_workchain_option(cmd_generate);
     add_signature_option(cmd_generate, "-f,--from")->required(false);
@@ -111,10 +113,13 @@ int main(int argc, char** argv)
         std::exit(0);
     });
 
+    // Subcommand: deploy
+
     auto* cmd_deploy = cmd.add_subcommand("deploy", "Deploy new contract")->excludes(address_option);
     add_signature_option(cmd_deploy);
     add_workchain_option(cmd_deploy);
-    //add_force_local_option(cmd_deploy); // will not work now
+    // add_force_local_option(cmd_deploy); // will not work now
+    std::vector<td::BigInt256> owners{};
     cmd_deploy
         ->add_option_function<std::vector<std::string>>(
             "-o,--owner",
@@ -129,6 +134,7 @@ int main(int argc, char** argv)
         ->transform(PubKeyValidator{})
         ->expected(-1)
         ->required();
+    td::uint8 req_confirms{1};
     cmd_deploy->add_option("-r,--req-confirms", req_confirms, "Number of confirmations required for executing transaction", true)
         ->default_val(static_cast<td::uint16>(req_confirms))
         ->check(CLI::Range(1, 32));
@@ -158,7 +164,10 @@ int main(int argc, char** argv)
         };
     });
 
+    // Subcommand: submitTransaction
+
     auto* cmd_submit_transaction = cmd.add_subcommand("submitTransaction", "Create new transaction")->needs(address_option);
+    block::StdAddress dest{};
     cmd_submit_transaction
         ->add_option_function<std::string>(
             "dest",
@@ -166,6 +175,7 @@ int main(int argc, char** argv)
             "Destination address")
         ->required()
         ->check(AddressValidator{});
+    td::BigInt256 value{};
     cmd_submit_transaction
         ->add_option_function<std::string>(
             "value",
@@ -173,8 +183,11 @@ int main(int argc, char** argv)
             "Message value in TON")
         ->required()
         ->transform(TonValidator{});
+    bool all_balance = false;
     cmd_submit_transaction->add_option("--all-balance", all_balance, "Send all balance and delete contract", true);
+    bool bounce = true;
     cmd_submit_transaction->add_option("--bounce", bounce, "Return message back when it is send to uninitialized address", true);
+    td::Ref<vm::Cell> payload{vm::CellBuilder{}.finalize()};
     cmd_submit_transaction->add_option_function<std::string>(
         "--payload",
         [&](const std::string& str) {
@@ -212,7 +225,10 @@ int main(int argc, char** argv)
         };
     });
 
+    // Subcommand: confirmTransaction
+
     auto* cmd_confirm_transaction = cmd.add_subcommand("confirmTransaction", "Confirm pending transaction")->needs(address_option);
+    td::uint64 transaction_id{};
     cmd_confirm_transaction->add_option("transactionId", transaction_id, "Transaction id")->required();
     add_signature_option(cmd_confirm_transaction);
     add_force_local_option(cmd_confirm_transaction);
@@ -234,8 +250,12 @@ int main(int argc, char** argv)
         };
     });
 
+    // Subcommand: isConfirmed
+
     auto* cmd_is_confirmed = cmd.add_subcommand("isConfirmed", "Check if transactions are confirmed")->needs(address_option);
+    td::uint32 mask{};
     cmd_is_confirmed->add_option("mask", mask, "Mask")->required()->check(CLI::PositiveNumber);
+    td::uint8 index{};
     cmd_is_confirmed->add_option("index", index, "Index")->required()->check(CLI::PositiveNumber);
     cmd_is_confirmed->callback([&] {
         action = [&](td::actor::ActorId<App>&& actor_id) {
@@ -247,6 +267,8 @@ int main(int argc, char** argv)
                 index);
         };
     });
+
+    // Subcommand: getParameters
 
     cmd.add_subcommand("getParameters", "Get msig parameters")->needs(address_option)->callback([&] {
         action = [](td::actor::ActorId<App>&& actor_id) {
@@ -261,6 +283,8 @@ int main(int argc, char** argv)
             }));
         };
     });
+
+    // Subcommand: getTransaction
 
     auto print_transaction = [](const msig::Transaction& trans, size_t offset) {
         const std::string tab(offset, ' ');
@@ -294,6 +318,8 @@ int main(int argc, char** argv)
         };
     });
 
+    // Subcommand: getTransactions
+
     cmd.add_subcommand("getTransactions", "Get pending transactions")->needs(address_option)->callback([&] {
         action = [&](td::actor::ActorId<App>&& actor_id) {
             using Result = msig::GetTransactions::Result;
@@ -315,6 +341,8 @@ int main(int argc, char** argv)
         };
     });
 
+    // Subcommand: getTransactionIds
+
     cmd.add_subcommand("getTransactionIds", "Get ids of pending transactions")->needs(address_option)->callback([&] {
         action = [](td::actor::ActorId<App>&& actor_id) {
             using Result = msig::GetTransactionIds::Result;
@@ -335,6 +363,8 @@ int main(int argc, char** argv)
             }));
         };
     });
+
+    // Subcommand: getCustodians
 
     cmd.add_subcommand("getCustodians", "Get owners of this wallet")->needs(address_option)->callback([&] {
         action = [](td::actor::ActorId<App>&& actor_id) {
@@ -358,6 +388,8 @@ int main(int argc, char** argv)
         };
     });
 
+    // Start application
+
     cmd.require_subcommand();
 
     CLI11_PARSE(cmd, argc, argv)
@@ -365,7 +397,7 @@ int main(int argc, char** argv)
     td::set_default_failure_signal_handler();
 
     td::actor::Scheduler scheduler({thread_count});
-    scheduler.run_in_context([&] { app = td::actor::create_actor<App>("ton-msig", App::Options{std::move(global_config)}); });
+    scheduler.run_in_context([&] { app = App::create({std::move(global_config)}); });
     scheduler.run_in_context([&] {
         if (action) {
             auto request = action(app.get());
@@ -374,5 +406,5 @@ int main(int argc, char** argv)
         app.release();
     });
     scheduler.run();
-    return 0;
+    return shared_execution_status.get();
 }
