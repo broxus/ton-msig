@@ -31,6 +31,8 @@ class Wallet final : public td::actor::Actor {
     };
 
 public:
+    constexpr static td::Slice actor_name = "Wallet";
+
     struct BriefAccountInfo {
         AccountStatus status{AccountStatus::uninit};
         td::RefInt256 balance{};

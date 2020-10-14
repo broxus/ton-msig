@@ -27,6 +27,8 @@ Options:
 
 Subcommands:
   generate                                Generate new keypair
+  deploy                                  Deploy new contract
+  info                                    Get account info
   submitTransaction                       Create new transaction
   confirmTransaction                      Confirm pending transaction
   isConfirmed                             Check if transactions are confirmed

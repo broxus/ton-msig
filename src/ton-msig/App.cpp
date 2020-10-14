@@ -19,7 +19,13 @@ void App::close()
 void App::make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action)
 {
     auto id = actor_id_++;
-    actors_[id] = td::actor::create_actor<Wallet>("Wallet", client_.get_client(), actor_shared(this, id), addr, std::move(action));
+    actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(action));
+}
+
+void App::get_account_info(const block::StdAddress& addr, td::Promise<Wallet::BriefAccountInfo>&& promise)
+{
+    auto id = actor_id_++;
+    actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(promise));
 }
 
 void App::start_up()

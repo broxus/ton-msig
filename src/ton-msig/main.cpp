@@ -22,9 +22,9 @@ private:
 } shared_execution_status = {};
 
 template <typename T>
-auto create_handler(td::actor::ActorId<App>&& actor_id, std::function<void(T&&)>&& formatter) -> td::Promise<T>
+auto create_handler(const td::actor::ActorId<App>& actor_id, std::function<void(T&&)>&& formatter) -> td::Promise<T>
 {
-    return td::PromiseCreator::lambda([actor_id = std::move(actor_id), formatter = std::move(formatter)](td::Result<T> R) {
+    return td::PromiseCreator::lambda([actor_id, formatter = std::move(formatter)](td::Result<T> R) {
         if (R.is_error()) {
             std::cerr << R.move_as_error().message().str() << std::endl;
             shared_execution_status.set(1);
@@ -39,7 +39,9 @@ auto create_handler(td::actor::ActorId<App>&& actor_id, std::function<void(T&&)>
 int main(int argc, char** argv)
 {
     td::actor::ActorOwn<App> app;
-    std::function<std::unique_ptr<ActionBase>(td::actor::ActorId<App> &&)> action;
+
+    std::function<std::unique_ptr<ActionBase>(const td::actor::ActorId<App>&)> action_make_request;
+    std::function<td::Promise<Wallet::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
 
     CLI::App cmd{"ton-msig"};
     cmd.get_formatter()->column_width(42);
@@ -143,7 +145,7 @@ int main(int argc, char** argv)
         const auto addr = check_result(Contract::generate_addr(public_key));
         address = block::StdAddress{workchain, addr, false};
 
-        action = [&](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             const auto now = now_ms();
             const auto expire = now / 1000 + 60;
             CHECK(key.has_value())
@@ -154,13 +156,29 @@ int main(int argc, char** argv)
             }
 
             return std::make_unique<msig::Constructor>(
-                create_handler<std::nullopt_t>(std::move(actor_id), [&](std::nullopt_t) { std::cout << "{}" << std::endl; }),
+                create_handler<std::nullopt_t>(actor_id, [&](std::nullopt_t) { std::cout << "{}" << std::endl; }),
                 force_local,
                 now,
                 expire,
                 std::move(owners),
                 req_confirms,
                 *key);
+        };
+    });
+
+    // Subcommand: info
+
+    cmd.add_subcommand("info", "Get account info")->needs(address_option)->callback([&] {
+        action_get_account_info = [&](const td::actor::ActorId<App>& actor_id) {
+            using Result = Wallet::BriefAccountInfo;
+            return create_handler<Result>(actor_id, [&](Result&& info) {
+                std::cout << "{\n"
+                          << R"(  "state": ")" << to_string(info.status) << "\",\n"
+                          << R"(  "balance": ")" << (info.balance.not_null() ? info.balance->to_dec_string() : "0") << "\",\n"
+                          << R"(  "last_transaction_lt": )" << info.last_transaction_lt << ",\n"
+                          << R"(  "last_transaction_hash": ")" << info.last_transaction_hash.to_hex() << "\"\n"
+                          << "}" << std::endl;
+            });
         };
     });
 
@@ -201,7 +219,7 @@ int main(int argc, char** argv)
     add_signature_option(cmd_submit_transaction);
     add_force_local_option(cmd_submit_transaction);
     cmd_submit_transaction->callback([&] {
-        action = [&](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             const auto now = now_ms();
             const auto expire = now / 1000 + 60;
             CHECK(key.has_value())
@@ -211,7 +229,7 @@ int main(int argc, char** argv)
 
             return std::make_unique<msig::SubmitTransaction>(
                 create_handler<td::uint64>(
-                    std::move(actor_id),
+                    actor_id,
                     [&](td::uint64 transaction_id) { std::cout << "{\n  \"transactionId\": " << transaction_id << "\n}" << std::endl; }),
                 force_local,
                 now,
@@ -233,7 +251,7 @@ int main(int argc, char** argv)
     add_signature_option(cmd_confirm_transaction);
     add_force_local_option(cmd_confirm_transaction);
     cmd_confirm_transaction->callback([&] {
-        action = [&](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             const auto now = now_ms();
             const auto expire = now / 1000 + 60;
             CHECK(key.has_value())
@@ -241,7 +259,7 @@ int main(int argc, char** argv)
             LOG(DEBUG) << "Confirming " << transaction_id << " for " << address.workchain << ":" << address.addr.to_hex();
 
             return std::make_unique<msig::ConfirmTransaction>(
-                create_handler<std::nullopt_t>(std::move(actor_id), [&](std::nullopt_t) { std::cout << "{}" << std::endl; }),
+                create_handler<std::nullopt_t>(actor_id, [&](std::nullopt_t) { std::cout << "{}" << std::endl; }),
                 force_local,
                 now,
                 expire,
@@ -258,10 +276,10 @@ int main(int argc, char** argv)
     td::uint8 index{};
     cmd_is_confirmed->add_option("index", index, "Index")->required()->check(CLI::PositiveNumber);
     cmd_is_confirmed->callback([&] {
-        action = [&](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             return std::make_unique<msig::IsConfirmed>(
                 create_handler<bool>(
-                    std::move(actor_id),
+                    actor_id,
                     [&](bool confirmed) { std::cout << "{\n  \"confirmed\": " << (confirmed ? "true" : "false") << "\n}" << std::endl; }),
                 mask,
                 index);
@@ -271,8 +289,8 @@ int main(int argc, char** argv)
     // Subcommand: getParameters
 
     cmd.add_subcommand("getParameters", "Get msig parameters")->needs(address_option)->callback([&] {
-        action = [](td::actor::ActorId<App>&& actor_id) {
-            return std::make_unique<msig::GetParameters>(create_handler<msig::Parameters>(std::move(actor_id), [&](msig::Parameters&& param) {
+        action_make_request = [](const td::actor::ActorId<App>& actor_id) {
+            return std::make_unique<msig::GetParameters>(create_handler<msig::Parameters>(actor_id, [&](msig::Parameters&& param) {
                 std::cout << "{\n"                                                                                                //
                           << R"(  "max_queued_transactions": )" << static_cast<uint32_t>(param.max_queued_transactions) << ",\n"  //
                           << R"(  "max_custodian_count": )" << static_cast<uint32_t>(param.max_custodian_count) << ",\n"          //
@@ -305,11 +323,11 @@ int main(int argc, char** argv)
     auto* cmd_get_transaction = cmd.add_subcommand("getTransaction", "Get transaction info")->needs(address_option);
     cmd_get_transaction->add_option("transactionId", transaction_id, "Transaction id")->required()->check(CLI::PositiveNumber);
     cmd_get_transaction->callback([&] {
-        action = [&](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             using Result = msig::GetTransaction::Result;
             return std::make_unique<msig::GetTransaction>(
                 create_handler<Result>(
-                    std::move(actor_id),
+                    actor_id,
                     [&](Result&& transaction) {
                         print_transaction(transaction, 0);
                         std::cout << std::endl;
@@ -321,9 +339,9 @@ int main(int argc, char** argv)
     // Subcommand: getTransactions
 
     cmd.add_subcommand("getTransactions", "Get pending transactions")->needs(address_option)->callback([&] {
-        action = [&](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             using Result = msig::GetTransactions::Result;
-            return std::make_unique<msig::GetTransactions>(create_handler<Result>(std::move(actor_id), [&](Result&& transactions) {
+            return std::make_unique<msig::GetTransactions>(create_handler<Result>(actor_id, [&](Result&& transactions) {
                 if (transactions.empty()) {
                     std::cout << "[]" << std::endl;
                     return;
@@ -344,9 +362,9 @@ int main(int argc, char** argv)
     // Subcommand: getTransactionIds
 
     cmd.add_subcommand("getTransactionIds", "Get ids of pending transactions")->needs(address_option)->callback([&] {
-        action = [](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [](const td::actor::ActorId<App>& actor_id) {
             using Result = msig::GetTransactionIds::Result;
-            return std::make_unique<msig::GetTransactionIds>(create_handler<Result>(std::move(actor_id), [&](Result&& ids) {
+            return std::make_unique<msig::GetTransactionIds>(create_handler<Result>(actor_id, [&](Result&& ids) {
                 if (ids.empty()) {
                     std::cout << "[]" << std::endl;
                     return;
@@ -367,9 +385,9 @@ int main(int argc, char** argv)
     // Subcommand: getCustodians
 
     cmd.add_subcommand("getCustodians", "Get owners of this wallet")->needs(address_option)->callback([&] {
-        action = [](td::actor::ActorId<App>&& actor_id) {
+        action_make_request = [](const td::actor::ActorId<App>& actor_id) {
             using Result = msig::GetCustodians::Result;
-            return std::make_unique<msig::GetCustodians>(create_handler<Result>(std::move(actor_id), [&](Result&& custodians) {
+            return std::make_unique<msig::GetCustodians>(create_handler<Result>(actor_id, [&](Result&& custodians) {
                 if (custodians.empty()) {
                     std::cout << "[]" << std::endl;
                 }
@@ -399,9 +417,13 @@ int main(int argc, char** argv)
     td::actor::Scheduler scheduler({thread_count});
     scheduler.run_in_context([&] { app = App::create({std::move(global_config)}); });
     scheduler.run_in_context([&] {
-        if (action) {
-            auto request = action(app.get());
+        if (action_make_request) {
+            auto request = action_make_request(app.get());
             td::actor::send_closure(app, &App::make_request, address, std::move(request));
+        }
+        if (action_get_account_info) {
+            auto promise = action_get_account_info(app.get());
+            td::actor::send_closure(app, &App::get_account_info, address, std::move(promise));
         }
         app.release();
     });
