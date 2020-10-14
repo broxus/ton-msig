@@ -75,11 +75,6 @@ set_target_properties(
         LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib"
         OUTPUT_NAME "${SUBPROJ_NAME}$<$<CONFIG:Debug>:d>")
 
-# Set version
-set_target_properties(
-        ${SUBPROJ_NAME} PROPERTIES
-        VERSION ${${SUBPROJ_NAME}_MAJOR_VERSION}.${${SUBPROJ_NAME}_MINOR_VERSION}.${${SUBPROJ_NAME}_PATCH_VERSION})
-
 # Set include directories for this project and if it will use as installing
 target_include_directories(
         ${SUBPROJ_NAME}
