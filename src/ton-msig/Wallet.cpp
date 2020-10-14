@@ -114,9 +114,9 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
         case State::getting_account_info: {
             switch (mode_) {
                 case Mode::get_account_info: {
-                    BriefAccountInfo brief_info{
-                        .last_transaction_lt = last_transaction_lt_,  //
-                        .last_transaction_hash = last_transaction_hash_};
+                    BriefAccountInfo brief_info{};
+                    brief_info.last_transaction_lt = last_transaction_lt_;
+                    brief_info.last_transaction_hash = last_transaction_hash_;
 
                     block::gen::Account::Record_account acc;
                     block::gen::AccountStorage::Record store;
