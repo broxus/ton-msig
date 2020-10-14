@@ -14,29 +14,82 @@
 ### Usage
 ```
 ton-msig
-Usage: ./ton-msigd [OPTIONS] [addr] SUBCOMMAND
+Usage: ./ton-msig [OPTIONS] [addr] SUBCOMMAND
 
 Positionals:
-  addr ADDRESS:ADDRESS                    Wallet contract address
+  addr ADDRESS:ADDRESS                      Wallet contract address
 
 Options:
-  -h,--help                               Print this help message and exit
-  -v,--verbose INT=3                      Verbosity level
-  -t,--threads UINT:POSITIVE=2            Thread count
-  -c,--config TEXT:FILE                   Path to global config
+  -h,--help                                 Print this help message and exit
+  --help-all                                Print extended help message and exit
+  -v,--verbose INT:INT in [1 - 6]=3         Verbosity level
+  -t,--threads UINT:POSITIVE=2              Thread count
+  -c,--config TEXT:FILE                     Path to global config
 
 Subcommands:
-  generate                                Generate new keypair
-  deploy                                  Deploy new contract
-  info                                    Get account info
-  submitTransaction                       Create new transaction
-  confirmTransaction                      Confirm pending transaction
-  isConfirmed                             Check if transactions are confirmed
-  getParameters                           Get msig parameters
-  getTransaction                          Get transaction info
-  getTransactions                         Get pending transactions
-  getTransactionIds                       Get ids of pending transactions
-  getCustodians                           Get owners of this wallet
+convert
+  Convert address into another formats
+
+generate
+  Generate new keypair
+  Options:
+    -a,--addr                                 Whether to generate an address
+    -w,--workchain INT:INT in [-1 - 0]        Workchain
+    -f,--from TEXT:FILE                       Path to keypair file
+
+deploy
+  Deploy new contract
+  Options:
+    -s,--sign TEXT:FILE REQUIRED              Path to keypair file
+    -w,--workchain INT:INT in [-1 - 0]        Workchain
+    -o,--owner TEXT:PUBKEY ... REQUIRED       Custodian public key
+    -r,--req-confirms UINT:INT in [1 - 32]=1  Number of confirmations required for executing transaction
+
+info
+  Get account info
+
+submitTransaction
+  Create new transaction
+  Positionals:
+    dest TEXT:ADDRESS REQUIRED                Destination address
+    value TEXT:TON REQUIRED                   Message value in TON
+  Options:
+    --all-balance BOOLEAN=0                   Send all balance and delete contract
+    --bounce BOOLEAN=1                        Return message back when it is send to uninitialized address
+    --payload TEXT                            Serialized bag of cells of message body
+    -s,--sign TEXT:FILE REQUIRED              Path to keypair file
+    --local                                   Force local execution
+
+confirmTransaction
+  Confirm pending transaction
+  Positionals:
+    transactionId UINT REQUIRED               Transaction id
+  Options:
+    -s,--sign TEXT:FILE REQUIRED              Path to keypair file
+    --local                                   Force local execution
+
+isConfirmed
+  Check if transactions are confirmed
+  Positionals:
+    mask UINT:POSITIVE REQUIRED               Mask
+    index UINT:POSITIVE REQUIRED              Index
+
+getParameters
+  Get msig parameters
+
+getTransaction
+  Get transaction info
+  Positionals:
+    transactionId UINT:POSITIVE REQUIRED      Transaction id
+
+getTransactions
+  Get pending transactions
+
+getTransactionIds
+  Get ids of pending transactions
+
+getCustodians
+  Get owners of this wallet
 ```
 
 ### Building

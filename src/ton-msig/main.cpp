@@ -44,7 +44,8 @@ int main(int argc, char** argv)
     std::function<td::Promise<Wallet::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
 
     CLI::App cmd{"ton-msig"};
-    cmd.get_formatter()->column_width(42);
+    cmd.get_formatter()->column_width(44);
+    cmd.set_help_all_flag("--help-all", "Print extended help message and exit");
 
     block::StdAddress address;
     auto address_option = cmd.add_option_function<std::string>(
@@ -55,7 +56,7 @@ int main(int argc, char** argv)
                               ->check(AddressValidator{});
 
     int verbosity_level = verbosity_INFO;
-    cmd.add_option("-v,--verbose", verbosity_level, "Verbosity level", true);
+    cmd.add_option("-v,--verbose", verbosity_level, "Verbosity level", true)->check(CLI::Range(1, 4));
 
     td::size_t thread_count = 2u;
     cmd.add_option("-t,--threads", thread_count, "Thread count", true)->check(CLI::PositiveNumber);
@@ -67,8 +68,7 @@ int main(int argc, char** argv)
            "Path to global config")
         ->check(CLI::ExistingFile);
 
-    // subcommands
-    //
+    // subcommands helpers
 
     std::optional<td::Ed25519::PrivateKey> key;
     const auto add_signature_option = [&key](CLI::App* subcommand, const char* name = "-s,--sign") -> CLI::Option* {
@@ -77,7 +77,7 @@ int main(int argc, char** argv)
                 name,
                 [&](const std::string& key_data) { key = check_result(load_key(key_data)); },
                 "Path to keypair file")
-            ->check(CLI::ExistingFile | MnemonicsValidator{})
+            ->check(CLI::ExistingFile /* | MnemonicsValidator{} */) // mnemonics not supported now
             ->required();
     };
 
@@ -90,6 +90,17 @@ int main(int argc, char** argv)
     const auto add_workchain_option = [&workchain](CLI::App* subcommand) -> CLI::Option* {
         return subcommand->add_option("-w,--workchain", workchain, "Workchain")->check(CLI::Range(-1, 0));
     };
+
+    // Subcommand: convert
+    cmd.add_subcommand("convert", "Convert address into another formats")->needs(address_option)->callback([&] {
+        std::cout << "{\n"
+                  << R"(  "raw": ")" << address.workchain << ":" << address.addr.to_hex() << "\",\n"
+                  << R"(  "packed": ")" << (address.bounceable = false, address.rserialize()) << "\",\n"
+                  << R"(  "packed_urlsafe": ")" << address.rserialize(/*urlsafe*/ true) << "\",\n"
+                  << R"(  "packed_bounceable": ")" << (address.bounceable = true, address.rserialize()) << "\",\n"
+                  << R"(  "packed_bounceable_urlsafe: ")" << address.rserialize(/*urlsafe*/ true) << "\"\n}" << std::endl;
+        std::exit(0);
+    });
 
     // Subcommand: generate
 
