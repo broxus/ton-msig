@@ -117,6 +117,7 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
                     BriefAccountInfo brief_info{};
                     brief_info.last_transaction_lt = last_transaction_lt_;
                     brief_info.last_transaction_hash = last_transaction_hash_;
+                    brief_info.sync_time = account_info_.gen_utime;
 
                     block::gen::Account::Record_account acc;
                     block::gen::AccountStorage::Record store;

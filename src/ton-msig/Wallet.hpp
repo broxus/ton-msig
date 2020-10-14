@@ -38,6 +38,7 @@ public:
         td::RefInt256 balance{};
         ton::LogicalTime last_transaction_lt{};
         td::Bits256 last_transaction_hash{};
+        ton::UnixTime sync_time{};
     };
 
     using AccountInfoHandler = td::Promise<BriefAccountInfo>;

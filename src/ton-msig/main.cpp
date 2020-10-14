@@ -176,8 +176,8 @@ int main(int argc, char** argv)
                           << R"(  "state": ")" << to_string(info.status) << "\",\n"
                           << R"(  "balance": ")" << (info.balance.not_null() ? info.balance->to_dec_string() : "0") << "\",\n"
                           << R"(  "last_transaction_lt": )" << info.last_transaction_lt << ",\n"
-                          << R"(  "last_transaction_hash": ")" << info.last_transaction_hash.to_hex() << "\"\n"
-                          << "}" << std::endl;
+                          << R"(  "last_transaction_hash": ")" << info.last_transaction_hash.to_hex() << "\",\n"
+                          << R"(  "sync_utime": )" << info.sync_time << "\n}" << std::endl;
             });
         };
     });
