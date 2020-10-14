@@ -188,8 +188,10 @@ auto Wallet::run_local() -> td::Status
     LOG(DEBUG) << "Run local";
 
     CHECK(state_ == State::calling_method_local)
-    TRY_RESULT(encoded_body, context_->create_body())
-    TRY_RESULT(output, ftabi::run_smc_method(addr_, std::move(account_info_), std::move(encoded_body.first), std::move(encoded_body.second)))
+    TRY_RESULT(encoded_message, context_->create_message())
+    auto [function, state_init, body] = std::move(encoded_message);
+
+    TRY_RESULT(output, ftabi::run_smc_method(addr_, std::move(account_info_), std::move(function), std::move(state_init), std::move(body)))
     return context_->handle_result(std::move(output));
 }
 
@@ -198,13 +200,12 @@ auto Wallet::run_remote() -> td::Status
     LOG(DEBUG) << "Run remote";
 
     CHECK(state_ == State::calling_method_remote)
-    TRY_RESULT(encoded_body, context_->create_body())
-    function_ = std::move(encoded_body.first);
+    TRY_RESULT(encoded_message, context_->create_message())
+    auto [function, state_init, body] = std::move(encoded_message);
+    function_ = std::move(function);
 
-    auto message = ton::GenericAccount::create_ext_message(addr_, {}, encoded_body.second);
+    auto message = ton::GenericAccount::create_ext_message(addr_, state_init, body);
     message_hash_ = message->get_hash();
-
-    vm::load_cell_slice(message).print_rec(std::cerr);
 
     LOG(DEBUG) << "Message hash: " << message_hash_.to_hex();
 

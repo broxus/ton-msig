@@ -1,5 +1,6 @@
 #include "Action.hpp"
 
+#include "Contract.hpp"
 #include "Stuff.hpp"
 
 using namespace ftabi;
@@ -101,6 +102,60 @@ auto decode_custodian(const ValueRef& value) -> Custodian
 
 }  // namespace
 
+// constructor
+
+Constructor::Constructor(
+    Handler&& promise,
+    bool force_local,
+    td::uint64 time,
+    td::uint32 expire,
+    std::vector<td::BigInt256>&& owners,
+    td::uint8 req_confirms,
+    const td::Ed25519::PrivateKey& private_key)
+    : Action{std::move(promise)}
+    , force_local_{force_local}
+    , time_{time}
+    , expire_{expire}
+    , owners_{std::move(owners)}
+    , req_confirms_{req_confirms}
+    , private_key_{private_key.as_octet_string().copy()}
+{
+}
+
+auto Constructor::create_message() -> td::Result<EncodedMessage>
+{
+    static auto input_params = make_params(ParamArray{"owners", ParamUint{"owner", 256}}, ParamUint{"reqConfirms", 8});
+    static auto function = td::Ref{Function{"constructor", make_header_params(), move_copy(input_params), {output_type()}}};
+
+    TRY_RESULT(public_key, private_key_.get_public_key())
+
+    std::vector<ValueRef> owners;
+    owners.reserve(owners_.size());
+    for (const auto& owner : owners_) {
+        owners.emplace_back(make_value(ParamUint{"owner", 256}, owner));
+    }
+
+    HeaderValues header_values =
+        make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()), make_value(ParamTime{}, time_), make_value(ParamExpire{}, expire_));
+    InputValues input_values{
+        make_value<ValueArray>(input_params[0], std::move(owners)),  //
+        make_value<ValueInt>(input_params[1], td::make_bigint(req_confirms_))};
+
+    FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
+
+    TRY_RESULT(init_state, Contract::generate_state_init(public_key))
+    TRY_RESULT(body, function->encode_input(call))
+
+    return std::make_tuple(function, std::move(init_state), std::move(body));
+}
+
+auto Constructor::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
+{
+    TRY_STATUS(check_output<ConfirmTransaction>(result))
+    promise.set_result(std::nullopt);
+    return td::Status::OK();
+}
+
 // submit_transaction
 
 SubmitTransaction::SubmitTransaction(
@@ -133,7 +188,7 @@ auto SubmitTransaction::output_type() -> ftabi::ParamRef
     return param;
 }
 
-auto SubmitTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>>
+auto SubmitTransaction::create_message() -> td::Result<EncodedMessage>
 {
     static auto input_params = make_params(ParamAddress{"dest"}, ParamUint{"value", 128}, ParamBool{"bounce"}, ParamBool{"allBalance"}, ParamCell{"payload"});
     static auto function = td::Ref{Function{"submitTransaction", make_header_params(), move_copy(input_params), {output_type()}}};
@@ -152,7 +207,7 @@ auto SubmitTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRef
     FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
 
     TRY_RESULT(body, function->encode_input(call))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto SubmitTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -180,7 +235,7 @@ ConfirmTransaction::ConfirmTransaction(
 {
 }
 
-auto ConfirmTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>>
+auto ConfirmTransaction::create_message() -> td::Result<EncodedMessage>
 {
     static ParamRef input_param{ParamUint{"transactionId", 64}};
     static auto function = td::Ref{Function{"confirmTransaction", make_header_params(), {input_param}, {output_type()}}};
@@ -194,7 +249,7 @@ auto ConfirmTransaction::create_body() -> td::Result<std::pair<ftabi::FunctionRe
     FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
 
     TRY_RESULT(body, function->encode_input(call))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto ConfirmTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -219,7 +274,7 @@ auto IsConfirmed::output_type() -> ftabi::ParamRef
     return param;
 }
 
-auto IsConfirmed::create_body() -> td::Result<EncodedBody>
+auto IsConfirmed::create_message() -> td::Result<EncodedMessage>
 {
     static auto input_params = make_params(ParamUint{"mask", 32}, ParamUint{"index", 8});
     static auto function = td::Ref{Function{"isConfirmed", make_header_params(), move_copy(input_params), {output_type()}}};
@@ -229,7 +284,7 @@ auto IsConfirmed::create_body() -> td::Result<EncodedBody>
          make_value<ValueInt>(input_params[1], td::make_bigint(index_))}}};
 
     TRY_RESULT(body, function->encode_input(call))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto IsConfirmed::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -257,11 +312,11 @@ auto GetParameters::output_type() -> std::vector<ftabi::ParamRef>
     return params;
 }
 
-auto GetParameters::create_body() -> td::Result<EncodedBody>
+auto GetParameters::create_message() -> td::Result<EncodedMessage>
 {
     static auto function = td::Ref{Function{"getParameters", make_header_params(), {}, {output_type()}}};
     TRY_RESULT(body, function->encode_input(empty_function_call()))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto GetParameters::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -285,14 +340,14 @@ auto GetTransaction::output_type() -> ftabi::ParamRef
     return param;
 }
 
-auto GetTransaction::create_body() -> td::Result<EncodedBody>
+auto GetTransaction::create_message() -> td::Result<EncodedMessage>
 {
     static auto function = td::Ref{Function{"getTransaction", make_header_params(), make_params(ParamUint{"id", 64}), {output_type()}}};
 
     auto call = FunctionCallRef{FunctionCall{{make_value(ParamUint{"id", 64}, td::make_bigint(transaction_id_))}}};
 
     TRY_RESULT(body, function->encode_input(call))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto GetTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -315,11 +370,11 @@ auto GetTransactions::output_type() -> ftabi::ParamRef
     return param;
 }
 
-auto GetTransactions::create_body() -> td::Result<EncodedBody>
+auto GetTransactions::create_message() -> td::Result<EncodedMessage>
 {
     static auto function = td::Ref{Function{"getTransactions", make_header_params(), {}, {output_type()}}};
     TRY_RESULT(body, function->encode_input(empty_function_call()))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto GetTransactions::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -350,11 +405,11 @@ auto GetTransactionIds::output_type() -> ftabi::ParamRef
     return param;
 }
 
-auto GetTransactionIds::create_body() -> td::Result<EncodedBody>
+auto GetTransactionIds::create_message() -> td::Result<EncodedMessage>
 {
     static auto function = td::Ref{Function{"getTransactionIds", make_header_params(), {}, {output_type()}}};
     TRY_RESULT(body, function->encode_input(empty_function_call()))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto GetTransactionIds::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
@@ -390,11 +445,11 @@ auto GetCustodians::output_type() -> ftabi::ParamRef
     return param;
 }
 
-auto GetCustodians::create_body() -> td::Result<EncodedBody>
+auto GetCustodians::create_message() -> td::Result<EncodedMessage>
 {
     static auto function = td::Ref{Function{"getCustodians", make_header_params(), {}, {output_type()}}};
     TRY_RESULT(body, function->encode_input(empty_function_call()))
-    return std::make_pair(function, std::move(body));
+    return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
 auto GetCustodians::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status

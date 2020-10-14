@@ -4,153 +4,14 @@
 #include <tdutils/td/utils/filesystem.h>
 #include <tonlib/keys/Mnemonic.h>
 
-#include <CLI/CLI.hpp>
 #include <cppcodec/hex_lower.hpp>
 #include <iostream>
 
 #include "App.hpp"
+#include "Cli.hpp"
 #include "Contract.hpp"
 
 using namespace app;
-
-static auto now_ms() -> td::uint64
-{
-    const auto duration = std::chrono::system_clock::now().time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-}
-
-template <typename T>
-static auto check_result(td::Result<T>&& result, const std::string& prefix = "") -> T
-{
-    if (result.is_error()) {
-        std::cerr << result.move_as_error_prefix(prefix).message().c_str() << std::endl;
-        std::exit(1);
-    }
-    return result.move_as_ok();
-}
-
-static auto is_mnemonics(const std::string& str) -> bool
-{
-    size_t word_count = 1;
-    for (size_t i = 0; i < str.size(); ++i) {
-        const auto c = str[i];
-
-        const auto after_space = i != 0 && str[i - 1] == ' ';
-        const auto is_space = c == ' ';
-
-        if (is_space && after_space || !is_space && (!td::is_alpha(c) || !std::islower(c))) {
-            return false;
-        }
-        else if (is_space) {
-            ++word_count;
-        }
-    }
-    return word_count == 12;
-}
-
-static auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>
-{
-    if (is_mnemonics(str)) {
-        TRY_RESULT(mnemonic, tonlib::Mnemonic::create(td::SecureString{str}, {}))
-        return mnemonic.to_private_key();
-    }
-    else {
-        TRY_RESULT(keys_file, td::read_file(str))
-        TRY_RESULT(json, td::json_decode(keys_file.as_slice()))
-        auto& root = json.get_object();
-        TRY_RESULT(secret, td::get_json_object_string_field(root, "secret", false))
-
-        td::Bits256 private_key_data{};
-        if (private_key_data.from_hex(secret) <= 0) {
-            return td::Status::Error("Invalid secret");
-        }
-
-        return ton::privkeys::Ed25519{private_key_data.as_slice()}.export_key();
-    }
-}
-
-struct AddressValidator : public CLI::Validator {
-    constexpr static auto type_name = "ADDRESS";
-
-    AddressValidator()
-        : CLI::Validator(type_name)
-    {
-        func_ = [](const std::string& str) {
-            if (!block::StdAddress{}.parse_addr(str)) {
-                return "Invalid contract address: " + str;
-            }
-            return std::string{};
-        };
-    }
-};
-
-struct MnemonicsValidator : public CLI::Validator {
-    constexpr static auto type_name = "MNEMONICS";
-
-    MnemonicsValidator()
-        : CLI::Validator(type_name)
-    {
-        func_ = [](const std::string& str) {
-            if (!is_mnemonics(str)) {
-                return "Invalid signature words: " + str;
-            }
-            return std::string{};
-        };
-    }
-};
-
-struct TonValidator : public CLI::Validator {
-    TonValidator()
-        : CLI::Validator("TON")
-    {
-        func_ = [](std::string& str) -> std::string {
-            constexpr auto error_prefix = "Invalid TON value: ";
-
-            if (str.empty()) {
-                return error_prefix;
-            }
-
-            bool is_nano = str[0] == 'T', is_valid = true, has_digit = false, has_dot = false;
-            auto dot_pos = std::string::npos;
-            size_t decimals = 0;
-
-            for (size_t i = is_nano; i < str.size(); ++i) {
-                const auto c = str[i];
-
-                const auto is_dot = c == '.' || c == ',';
-                const auto is_digit = td::is_digit(c);
-
-                if (!is_nano && is_dot || is_dot && (has_dot || !has_digit) || !is_dot && (!is_digit || has_dot && ++decimals > 9)) {
-                    is_valid = false;
-                    break;
-                }
-
-                if (is_dot) {
-                    has_dot = true;
-                    dot_pos = i;
-                }
-
-                if (is_digit) {
-                    has_digit = true;
-                }
-            }
-
-            if (!is_valid || (str.size() - is_nano) == 0) {
-                return error_prefix + str;
-            }
-
-            if (dot_pos != std::string::npos) {
-                str.erase(dot_pos, 1);
-            }
-            if (is_nano) {
-                str.erase(0, 1);
-                str += std::string(9u - decimals, '0');
-            }
-
-            return std::string{};
-        };
-    }
-};
 
 template <typename T>
 auto create_handler(td::actor::ActorId<App>&& actor_id, std::function<void(T&&)>&& formatter) -> td::Promise<T>
@@ -204,7 +65,8 @@ int main(int argc, char** argv)
     td::uint64 transaction_id{};
     td::uint32 mask{};
     td::uint8 index{};
-    ton::WorkchainId workchain{0};
+    std::vector<td::BigInt256> owners{};
+    td::uint8 req_confirms{1};
     bool gen_addr = false;
 
     std::optional<td::Ed25519::PrivateKey> key;
@@ -223,9 +85,14 @@ int main(int argc, char** argv)
         return subcommand->add_flag("--local", force_local, "Force local execution");
     };
 
+    ton::WorkchainId workchain{0};
+    const auto add_workchain_option = [&workchain](CLI::App* subcommand) -> CLI::Option* {
+        return subcommand->add_option("-w,--workchain", workchain, "Workchain")->check(CLI::Range(-1, 0));
+    };
+
     auto* cmd_generate = cmd.add_subcommand("generate", "Generate new keypair");
     cmd_generate->add_flag("-a,--addr", gen_addr, "Whether to generate an address");
-    cmd_generate->add_option("-w,--workchain", workchain, "Workchain")->check(CLI::Range(-1, 0));
+    add_workchain_option(cmd_generate);
     add_signature_option(cmd_generate, "-f,--from")->required(false);
     cmd_generate->callback([&] {
         const auto from_existing = key.has_value();
@@ -242,6 +109,53 @@ int main(int argc, char** argv)
         std::cout << "\n}" << std::endl;
 
         std::exit(0);
+    });
+
+    auto* cmd_deploy = cmd.add_subcommand("deploy", "Deploy new contract")->excludes(address_option);
+    add_signature_option(cmd_deploy);
+    add_workchain_option(cmd_deploy);
+    //add_force_local_option(cmd_deploy); // will not work now
+    cmd_deploy
+        ->add_option_function<std::vector<std::string>>(
+            "-o,--owner",
+            [&](const std::vector<std::string>& str) {
+                for (const auto& item : str) {
+                    td::BigInt256 owner;
+                    CHECK(owner.import_bytes(reinterpret_cast<const unsigned char*>(item.c_str()), item.size(), false))
+                    owners.emplace_back(owner);
+                }
+            },
+            "Custodian public key")
+        ->transform(PubKeyValidator{})
+        ->expected(-1)
+        ->required();
+    cmd_deploy->add_option("-r,--req-confirms", req_confirms, "Number of confirmations required for executing transaction", true)
+        ->default_val(static_cast<td::uint16>(req_confirms))
+        ->check(CLI::Range(1, 32));
+    cmd_deploy->callback([&] {
+        const auto public_key = check_result(key->get_public_key());
+        const auto addr = check_result(Contract::generate_addr(public_key));
+        address = block::StdAddress{workchain, addr, false};
+
+        action = [&](td::actor::ActorId<App>&& actor_id) {
+            const auto now = now_ms();
+            const auto expire = now / 1000 + 60;
+            CHECK(key.has_value())
+
+            LOG(DEBUG) << "Deploying contract to address " << address.workchain << ":" << address.addr.to_hex() << " with owners: ";
+            for (const auto& owner : owners) {
+                LOG(DEBUG) << "    " << owner.to_hex_string();
+            }
+
+            return std::make_unique<msig::Constructor>(
+                create_handler<std::nullopt_t>(std::move(actor_id), [&](std::nullopt_t) { std::cout << "{}" << std::endl; }),
+                force_local,
+                now,
+                expire,
+                std::move(owners),
+                req_confirms,
+                *key);
+        };
     });
 
     auto* cmd_submit_transaction = cmd.add_subcommand("submitTransaction", "Create new transaction")->needs(address_option);

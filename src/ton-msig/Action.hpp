@@ -6,10 +6,10 @@
 
 namespace app
 {
-using EncodedBody = std::pair<ftabi::FunctionRef, td::Ref<vm::Cell>>;
+using EncodedMessage = std::tuple<ftabi::FunctionRef, td::Ref<vm::Cell>, td::Ref<vm::Cell>>;
 
 struct ActionBase {
-    virtual auto create_body() -> td::Result<EncodedBody> = 0;
+    virtual auto create_message() -> td::Result<EncodedMessage> = 0;
     virtual auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status = 0;
     virtual void handle_error(td::Status error) = 0;
 
@@ -73,6 +73,32 @@ struct Custodian {
     td::BigInt256 pubkey{};
 };
 
+struct Constructor final : Action<std::nullopt_t> {
+    explicit Constructor(
+        Handler&& promise,
+        bool force_local,
+        td::uint64 time,
+        td::uint32 expire,
+        std::vector<td::BigInt256>&& owners,
+        td::uint8 req_confirms,
+        const td::Ed25519::PrivateKey& private_key);
+
+    static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
+    auto create_message() -> td::Result<EncodedMessage> final;
+    auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
+
+    [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
+    [[nodiscard]] auto expires_at() const -> td::uint32 final { return expire_; }
+    [[nodiscard]] auto is_get_method() const -> bool final { return force_local_; }
+
+    bool force_local_;
+    td::uint64 time_;
+    td::uint32 expire_;
+    std::vector<td::BigInt256> owners_;
+    td::uint8 req_confirms_;
+    td::Ed25519::PrivateKey private_key_;
+};
+
 struct SubmitTransaction final : Action<td::uint64> {
     explicit SubmitTransaction(
         Handler&& promise,
@@ -87,7 +113,7 @@ struct SubmitTransaction final : Action<td::uint64> {
         const td::Ed25519::PrivateKey& private_key);
 
     static auto output_type() -> ftabi::ParamRef;
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
@@ -115,7 +141,7 @@ struct ConfirmTransaction final : Action<std::nullopt_t> {
         const td::Ed25519::PrivateKey& private_key);
 
     static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
@@ -133,7 +159,7 @@ struct IsConfirmed final : Action<bool> {
     explicit IsConfirmed(Handler&& promise, td::uint32 mask, td::uint8 index);
 
     static auto output_type() -> ftabi::ParamRef;
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
@@ -146,7 +172,7 @@ struct GetParameters final : Action<Parameters> {
     explicit GetParameters(Handler&& promise);
 
     static auto output_type() -> std::vector<ftabi::ParamRef>;
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
@@ -156,7 +182,7 @@ struct GetTransaction final : Action<Transaction> {
     explicit GetTransaction(Handler&& promise, td::uint64 transaction_id);
 
     static auto output_type() -> ftabi::ParamRef;
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
@@ -168,7 +194,7 @@ struct GetTransactions final : Action<std::vector<Transaction>> {
     explicit GetTransactions(Handler&& promise);
 
     static auto output_type() -> ftabi::ParamRef;
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
@@ -178,7 +204,7 @@ struct GetTransactionIds final : Action<std::vector<td::uint64>> {
     explicit GetTransactionIds(Handler&& promise);
 
     static auto output_type() -> ftabi::ParamRef;
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
@@ -188,7 +214,7 @@ struct GetCustodians final : Action<std::vector<Custodian>> {
     explicit GetCustodians(Handler&& promise);
 
     static auto output_type() -> ftabi::ParamRef;
-    auto create_body() -> td::Result<EncodedBody> final;
+    auto create_message() -> td::Result<EncodedMessage> final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };

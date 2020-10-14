@@ -12,15 +12,17 @@ set(${SUBPROJ_NAME}_HEADERS
         "Action.hpp"
         "Api.hpp"
         "App.hpp"
+        "Cli.hpp"
         "Contract.hpp"
         "Stuff.hpp"
         "Wallet.hpp")
 
 set(${SUBPROJ_NAME}_SOURCES
+        "main.cpp"
         "Action.cpp"
         "Api.cpp"
-        "main.cpp"
         "App.cpp"
+        "Cli.cpp"
         "Contract.cpp"
         "Wallet.cpp")
 

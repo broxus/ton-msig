@@ -44,4 +44,10 @@ auto move_copy(const T& value) -> T
     return value;
 }
 
+inline auto now_ms() -> td::uint64
+{
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
 }  // namespace app
