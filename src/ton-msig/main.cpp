@@ -1,3 +1,4 @@
+#include <res/config.h>
 #include <res/mainnet_config_json.h>
 #include <td/utils/JsonBuilder.h>
 #include <td/utils/port/signals.h>
@@ -43,9 +44,10 @@ int main(int argc, char** argv)
     std::function<std::unique_ptr<ActionBase>(const td::actor::ActorId<App>&)> action_make_request;
     std::function<td::Promise<Wallet::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
 
-    CLI::App cmd{"ton-msig"};
+    CLI::App cmd{PROJECT_NAME};
     cmd.get_formatter()->column_width(44);
     cmd.set_help_all_flag("--help-all", "Print extended help message and exit");
+    cmd.set_version_flag("-v,--version", PROJECT_VER);
 
     block::StdAddress address;
     auto address_option = cmd.add_option_function<std::string>(
@@ -56,7 +58,7 @@ int main(int argc, char** argv)
                               ->check(AddressValidator{});
 
     int verbosity_level = verbosity_INFO;
-    cmd.add_option("-v,--verbose", verbosity_level, "Verbosity level", true)->check(CLI::Range(1, 4));
+    cmd.add_option("-l,--log-level", verbosity_level, "Log verbosity level", true)->check(CLI::Range(1, 7));
 
     td::size_t thread_count = 2u;
     cmd.add_option("-t,--threads", thread_count, "Thread count", true)->check(CLI::PositiveNumber);

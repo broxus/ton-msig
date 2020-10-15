@@ -4,10 +4,6 @@ set(${SUBPROJ_NAME}_CXX_STANDARD 17)
 set(${SUBPROJ_NAME}_CXX_EXTENSIONS OFF)
 set(${SUBPROJ_NAME}_CXX_STANDARD_REQUIRED YES)
 
-set(${SUBPROJ_NAME}_MAJOR_VERSION 0)
-set(${SUBPROJ_NAME}_MINOR_VERSION 0)
-set(${SUBPROJ_NAME}_PATCH_VERSION 1)
-
 set(${SUBPROJ_NAME}_HEADERS
         "Action.hpp"
         "Api.hpp"
@@ -27,13 +23,16 @@ set(${SUBPROJ_NAME}_SOURCES
         "Wallet.cpp")
 
 include(BuildHelpers)
-set(${SUBPROJ_NAME}_EMBED_DIR ${CMAKE_CURRENT_BINARY_DIR}/res)
-embed_resource("${RESOURCE_DIR}/mainnet.config.json" "${${SUBPROJ_NAME}_EMBED_DIR}/mainnet_config_json.h" MAINNET_CONFIG_JSON SIGNED)
-embed_resource("${RESOURCE_DIR}/SafeMultisigWallet.tvc" "${${SUBPROJ_NAME}_EMBED_DIR}/safe_multisig_wallet_tvc.h" SAFE_MULTISIG_WALLET_TVC UNSIGNED)
+set(${SUBPROJ_NAME}_RES_DIR ${CMAKE_CURRENT_BINARY_DIR}/res)
 
-set(${SUBPROJ_NAME}_EMBED
-        "${${SUBPROJ_NAME}_EMBED_DIR}/mainnet_config_json.h"
-        "${${SUBPROJ_NAME}_EMBED_DIR}/safe_multisig_wallet_tvc.h")
+configure_file(${RESOURCE_DIR}/config.h.in "${${SUBPROJ_NAME}_RES_DIR}/config.h")
+embed_resource("${RESOURCE_DIR}/mainnet.config.json" "${${SUBPROJ_NAME}_RES_DIR}/mainnet_config_json.h" MAINNET_CONFIG_JSON SIGNED)
+embed_resource("${RESOURCE_DIR}/SafeMultisigWallet.tvc" "${${SUBPROJ_NAME}_RES_DIR}/safe_multisig_wallet_tvc.h" SAFE_MULTISIG_WALLET_TVC UNSIGNED)
+
+set(${SUBPROJ_NAME}_RES
+        "${${SUBPROJ_NAME}_RES_DIR}/config.h"
+        "${${SUBPROJ_NAME}_RES_DIR}/mainnet_config_json.h"
+        "${${SUBPROJ_NAME}_RES_DIR}/safe_multisig_wallet_tvc.h")
 
 # ############################################################### #
 # Options ####################################################### #
@@ -50,7 +49,7 @@ set(
         ${SUBPROJ_NAME}_ALL_SRCS
         ${${SUBPROJ_NAME}_HEADERS}
         ${${SUBPROJ_NAME}_SOURCES}
-        ${${SUBPROJ_NAME}_EMBED})
+        ${${SUBPROJ_NAME}_RES})
 
 # ############################################################### #
 # Create target for build ####################################### #

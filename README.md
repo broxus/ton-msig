@@ -22,7 +22,8 @@ Positionals:
 Options:
   -h,--help                                 Print this help message and exit
   --help-all                                Print extended help message and exit
-  -v,--verbose INT:INT in [1 - 4]=3         Verbosity level
+  -v,--version                              Display program version information and exit
+  -l,--log-level INT:INT in [1 - 7]=3       Log verbosity level
   -t,--threads UINT:POSITIVE=2              Thread count
   -c,--config TEXT:FILE                     Path to global config
 
@@ -99,15 +100,13 @@ getCustodians
 ```
 
 ### Building
+
+> * requires the latest CMake (e.g. 3.18)
+> * g++ > 7.4.0
+> * libssl-dev, zlib1g-dev
+
 ```
-# Install dependencies
-sudo apt-get update
-sudo apt-get install git gcc g++ make libssl-dev zlib1g-dev wget
-
-# Install latest version of cmake
-wget -qO- "https://cmake.org/files/v3.18/cmake-3.18.4-Linux-x86_64.tar.gz" | tar --strip-components=1 -xz -C ~/.local
-
-# Clone project
+# Prepare project
 git clone https://github.com/broxus/ton-msig.git --recursive
 mkdir -p ton-msig/build
 cd ton-msig/build
@@ -126,5 +125,5 @@ cmake .. \
 cmake --build . --target ton-msig -- -j4
 
 # Done
-./bin/ton-msig -h
+./bin/ton-msig -v
 ```
