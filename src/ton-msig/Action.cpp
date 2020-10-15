@@ -1,5 +1,10 @@
 #include "Action.hpp"
 
+#include <td/utils/base64.h>
+#include <td/utils/filesystem.h>
+
+#include <utility>
+
 #include "Contract.hpp"
 #include "Stuff.hpp"
 
@@ -63,6 +68,24 @@ auto transaction_param() -> ParamTuple
     };
 }
 
+auto save_message_info(const std::optional<std::string>& path, td::uint64 created_at, td::uint32 expires_at, const td::Ref<vm::Cell>& message) -> td::Status
+{
+    if (!path.has_value()) {
+        return td::Status::OK();
+    }
+
+    TRY_RESULT(encoded, vm::std_boc_serialize(message))
+
+    const auto data = PSLICE() << "{\n"
+                               << R"(  "created_at": )" << created_at << ",\n"
+                               << R"(  "expires_at": )" << expires_at << ",\n"
+                               << R"(  "message": ")" << td::base64_encode(encoded.as_slice()) << "\",\n"
+                               << R"(  "message_hash": ")" << message->get_hash().to_hex() << "\"\n"
+                               << "}\n";
+
+    return td::atomic_write_file(*path, data);
+}
+
 auto decode_parameters(const std::vector<ValueRef>& values) -> Parameters
 {
     return Parameters{
@@ -111,7 +134,8 @@ Constructor::Constructor(
     td::uint32 expire,
     std::vector<td::BigInt256>&& owners,
     td::uint8 req_confirms,
-    const td::Ed25519::PrivateKey& private_key)
+    const td::Ed25519::PrivateKey& private_key,
+    std::optional<std::string> msg_info_path)
     : Action{std::move(promise)}
     , force_local_{force_local}
     , time_{time}
@@ -119,6 +143,7 @@ Constructor::Constructor(
     , owners_{std::move(owners)}
     , req_confirms_{req_confirms}
     , private_key_{private_key.as_octet_string().copy()}
+    , msg_info_path_{std::move(msg_info_path)}
 {
 }
 
@@ -149,6 +174,11 @@ auto Constructor::create_message() -> td::Result<EncodedMessage>
     return std::make_tuple(function, std::move(init_state), std::move(body));
 }
 
+auto Constructor::handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status
+{
+    return save_message_info(msg_info_path_, time_, expire_, message);
+}
+
 auto Constructor::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
 {
     TRY_STATUS(check_output<ConfirmTransaction>(result))
@@ -168,7 +198,8 @@ SubmitTransaction::SubmitTransaction(
     bool bounce,
     bool all_balance,
     td::Ref<vm::Cell> payload,
-    const td::Ed25519::PrivateKey& private_key)
+    const td::Ed25519::PrivateKey& private_key,
+    std::optional<std::string> msg_info_path)
     : Action{std::move(promise)}
     , force_local_{force_local}
     , time_{time}
@@ -179,6 +210,7 @@ SubmitTransaction::SubmitTransaction(
     , all_balance_{all_balance}
     , payload_{std::move(payload)}
     , private_key_{private_key.as_octet_string().copy()}
+    , msg_info_path_{std::move(msg_info_path)}
 {
 }
 
@@ -210,6 +242,11 @@ auto SubmitTransaction::create_message() -> td::Result<EncodedMessage>
     return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
 }
 
+auto SubmitTransaction::handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status
+{
+    return save_message_info(msg_info_path_, time_, expire_, message);
+}
+
 auto SubmitTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
 {
     TRY_STATUS(check_output<SubmitTransaction>(result))
@@ -225,13 +262,15 @@ ConfirmTransaction::ConfirmTransaction(
     td::uint64 time,
     td::uint32 expire,
     td::uint64 transaction_id,
-    const td::Ed25519::PrivateKey& private_key)
+    const td::Ed25519::PrivateKey& private_key,
+    std::optional<std::string> msg_info_path)
     : Action{std::move(promise)}
     , force_local_{force_local}
     , time_{time}
     , expire_{expire}
     , transaction_id_{transaction_id}
     , private_key_{private_key.as_octet_string().copy()}
+    , msg_info_path_{std::move(msg_info_path)}
 {
 }
 
@@ -250,6 +289,11 @@ auto ConfirmTransaction::create_message() -> td::Result<EncodedMessage>
 
     TRY_RESULT(body, function->encode_input(call))
     return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
+}
+
+auto ConfirmTransaction::handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status
+{
+    return save_message_info(msg_info_path_, time_, expire_, message);
 }
 
 auto ConfirmTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status

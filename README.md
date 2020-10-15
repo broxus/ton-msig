@@ -22,7 +22,7 @@ Positionals:
 Options:
   -h,--help                                 Print this help message and exit
   --help-all                                Print extended help message and exit
-  -v,--verbose INT:INT in [1 - 6]=3         Verbosity level
+  -v,--verbose INT:INT in [1 - 4]=3         Verbosity level
   -t,--threads UINT:POSITIVE=2              Thread count
   -c,--config TEXT:FILE                     Path to global config
 
@@ -44,6 +44,8 @@ deploy
     -w,--workchain INT:INT in [-1 - 0]        Workchain
     -o,--owner TEXT:PUBKEY ... REQUIRED       Custodian public key
     -r,--req-confirms UINT:INT in [1 - 32]=1  Number of confirmations required for executing transaction
+    --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
+    --save TEXT                               Save message info to file
 
 info
   Get account info
@@ -59,6 +61,8 @@ submitTransaction
     --payload TEXT                            Serialized bag of cells of message body
     -s,--sign TEXT:FILE REQUIRED              Path to keypair file
     --local                                   Force local execution
+    --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
+    --save TEXT                               Save message info to file
 
 confirmTransaction
   Confirm pending transaction
@@ -67,6 +71,8 @@ confirmTransaction
   Options:
     -s,--sign TEXT:FILE REQUIRED              Path to keypair file
     --local                                   Force local execution
+    --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
+    --save TEXT                               Save message info to file
 
 isConfirmed
   Check if transactions are confirmed

@@ -10,6 +10,7 @@ using EncodedMessage = std::tuple<ftabi::FunctionRef, td::Ref<vm::Cell>, td::Ref
 
 struct ActionBase {
     virtual auto create_message() -> td::Result<EncodedMessage> = 0;
+    virtual auto handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status { return td::Status::OK(); };
     virtual auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status = 0;
     virtual void handle_error(td::Status error) = 0;
 
@@ -81,10 +82,12 @@ struct Constructor final : Action<std::nullopt_t> {
         td::uint32 expire,
         std::vector<td::BigInt256>&& owners,
         td::uint8 req_confirms,
-        const td::Ed25519::PrivateKey& private_key);
+        const td::Ed25519::PrivateKey& private_key,
+        std::optional<std::string> msg_info_path);
 
     static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
     auto create_message() -> td::Result<EncodedMessage> final;
+    auto handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
@@ -97,6 +100,7 @@ struct Constructor final : Action<std::nullopt_t> {
     std::vector<td::BigInt256> owners_;
     td::uint8 req_confirms_;
     td::Ed25519::PrivateKey private_key_;
+    std::optional<std::string> msg_info_path_;
 };
 
 struct SubmitTransaction final : Action<td::uint64> {
@@ -110,10 +114,12 @@ struct SubmitTransaction final : Action<td::uint64> {
         bool bounce,
         bool all_balance,
         td::Ref<vm::Cell> payload,
-        const td::Ed25519::PrivateKey& private_key);
+        const td::Ed25519::PrivateKey& private_key,
+        std::optional<std::string> msg_info_path);
 
     static auto output_type() -> ftabi::ParamRef;
     auto create_message() -> td::Result<EncodedMessage> final;
+    auto handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
@@ -129,6 +135,7 @@ struct SubmitTransaction final : Action<td::uint64> {
     bool all_balance_;
     td::Ref<vm::Cell> payload_;
     td::Ed25519::PrivateKey private_key_;
+    std::optional<std::string> msg_info_path_;
 };
 
 struct ConfirmTransaction final : Action<std::nullopt_t> {
@@ -138,10 +145,12 @@ struct ConfirmTransaction final : Action<std::nullopt_t> {
         td::uint64 time,
         td::uint32 expire,
         td::uint64 transaction_id,
-        const td::Ed25519::PrivateKey& private_key);
+        const td::Ed25519::PrivateKey& private_key,
+        std::optional<std::string> msg_info_path);
 
     static auto output_type() -> std::vector<ftabi::ParamRef> { return {}; }
     auto create_message() -> td::Result<EncodedMessage> final;
+    auto handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status final;
     auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status final;
 
     [[nodiscard]] auto created_at() const -> td::uint64 final { return time_; }
@@ -153,6 +162,7 @@ struct ConfirmTransaction final : Action<std::nullopt_t> {
     td::uint32 expire_;
     td::uint64 transaction_id_;
     td::Ed25519::PrivateKey private_key_;
+    std::optional<std::string> msg_info_path_;
 };
 
 struct IsConfirmed final : Action<bool> {

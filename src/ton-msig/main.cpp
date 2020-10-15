@@ -91,6 +91,16 @@ int main(int argc, char** argv)
         return subcommand->add_option("-w,--workchain", workchain, "Workchain")->check(CLI::Range(-1, 0));
     };
 
+    std::optional<std::string> msg_info_path{};
+    const auto add_msg_info_path_option = [&msg_info_path](CLI::App* subcommand) -> CLI::Option* {
+        return subcommand->add_option("--save", msg_info_path, "Save message info to file");
+    };
+
+    td::uint32 msg_timeout{60};
+    const auto add_timeout_option = [&msg_timeout](CLI::App* subcommand) -> CLI::Option* {
+        return subcommand->add_option("--timeout", msg_timeout, "Set message expiration timeout in seconds", true)->check(CLI::Range(10, 86400));
+    };
+
     // Subcommand: convert
     cmd.add_subcommand("convert", "Convert address into another formats")->needs(address_option)->callback([&] {
         std::cout << "{\n"
@@ -151,6 +161,8 @@ int main(int argc, char** argv)
     cmd_deploy->add_option("-r,--req-confirms", req_confirms, "Number of confirmations required for executing transaction", true)
         ->default_val(static_cast<td::uint16>(req_confirms))
         ->check(CLI::Range(1, 32));
+    add_timeout_option(cmd_deploy);
+    add_msg_info_path_option(cmd_deploy);
     cmd_deploy->callback([&] {
         const auto public_key = check_result(key->get_public_key());
         const auto addr = check_result(Contract::generate_addr(public_key));
@@ -158,7 +170,7 @@ int main(int argc, char** argv)
 
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             const auto now = now_ms();
-            const auto expire = now / 1000 + 60;
+            const auto expire = now / 1000 + msg_timeout;
             CHECK(key.has_value())
 
             LOG(DEBUG) << "Deploying contract to address " << address.workchain << ":" << address.addr.to_hex() << " with owners: ";
@@ -173,7 +185,8 @@ int main(int argc, char** argv)
                 expire,
                 std::move(owners),
                 req_confirms,
-                *key);
+                *key,
+                msg_info_path);
         };
     });
 
@@ -229,10 +242,12 @@ int main(int argc, char** argv)
         "Serialized bag of cells of message body");
     add_signature_option(cmd_submit_transaction);
     add_force_local_option(cmd_submit_transaction);
+    add_timeout_option(cmd_submit_transaction);
+    add_msg_info_path_option(cmd_submit_transaction);
     cmd_submit_transaction->callback([&] {
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             const auto now = now_ms();
-            const auto expire = now / 1000 + 60;
+            const auto expire = now / 1000 + msg_timeout;
             CHECK(key.has_value())
 
             LOG(DEBUG) << "Sending " << value.to_dec_string() << " TON from " << address.workchain << ":" << address.addr.to_hex() << " to " << dest.workchain
@@ -250,7 +265,8 @@ int main(int argc, char** argv)
                 bounce,
                 all_balance,
                 payload,
-                *key);
+                *key,
+                msg_info_path);
         };
     });
 
@@ -261,10 +277,12 @@ int main(int argc, char** argv)
     cmd_confirm_transaction->add_option("transactionId", transaction_id, "Transaction id")->required();
     add_signature_option(cmd_confirm_transaction);
     add_force_local_option(cmd_confirm_transaction);
+    add_timeout_option(cmd_confirm_transaction);
+    add_msg_info_path_option(cmd_confirm_transaction);
     cmd_confirm_transaction->callback([&] {
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
             const auto now = now_ms();
-            const auto expire = now / 1000 + 60;
+            const auto expire = now / 1000 + msg_timeout;
             CHECK(key.has_value())
 
             LOG(DEBUG) << "Confirming " << transaction_id << " for " << address.workchain << ":" << address.addr.to_hex();
@@ -275,7 +293,8 @@ int main(int argc, char** argv)
                 now,
                 expire,
                 transaction_id,
-                *key);
+                *key,
+                msg_info_path);
         };
     });
 

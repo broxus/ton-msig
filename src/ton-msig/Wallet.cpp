@@ -241,6 +241,8 @@ auto Wallet::run_local() -> td::Status
     TRY_RESULT(encoded_message, context_->create_message())
     auto [function, state_init, body] = std::move(encoded_message);
 
+    check(context_->handle_prepared(ton::GenericAccount::create_ext_message(addr_, state_init, body)));
+
     TRY_RESULT(output, ftabi::run_smc_method(addr_, std::move(account_info_), std::move(function), std::move(state_init), std::move(body)))
     return context_->handle_result(std::move(output));
 }
@@ -257,6 +259,8 @@ auto Wallet::run_remote() -> td::Status
     auto message = ton::GenericAccount::create_ext_message(addr_, state_init, body);
     expires_at_ = context_->expires_at();
     message_hash_ = message->get_hash();
+
+    check(context_->handle_prepared(message));
 
     LOG(DEBUG) << "Message hash: " << message_hash_.to_hex();
 
@@ -296,13 +300,12 @@ auto Wallet::found_transaction(block::gen::Transaction::Record&& transaction) ->
 {
     LOG(DEBUG) << "Found transaction";
 
+    if (!function_->has_output()) {
+        return context_->handle_result({});
+    }
+
     if (transaction.outmsg_cnt == 0) {
-        if (function_->has_output()) {
-            return td::Status::Error("out messages missing");
-        }
-        else {
-            return context_->handle_result({});
-        }
+        return td::Status::Error("out messages missing");
     }
 
     vm::Dictionary dict{transaction.r1.out_msgs, 15};
