@@ -14,11 +14,26 @@ Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, con
     client_.set_client(std::move(ext_client_ref));
 }
 
+Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, FindMessage&& action)
+    : parent_{std::move(parent)}
+    , mode_{Mode::find_message_by_hash}
+    , state_{State::getting_account_info}
+    , addr_{addr}
+    , wait_until_appears_{action.wait}
+    , created_at_{static_cast<td::uint32>(action.created_at / 1000u)}
+    , expires_at_{action.expires_at}
+    , message_hash_{action.message_hash}
+    , message_found_handler_{std::move(action.promise)}
+{
+    client_.set_client(std::move(ext_client_ref));
+}
+
 Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context)
     : parent_{std::move(parent)}
     , mode_{Mode::send_message}
     , state_{State::getting_account_info}
     , addr_{addr}
+    , wait_until_appears_{true}
     , context_{std::move(context)}
 {
     client_.set_client(std::move(ext_client_ref));
@@ -93,12 +108,19 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
     account_info_ = info_r.move_as_ok();
 
     if (account_info_.root.is_null()) {
-        if (mode_ == Mode::get_account_info) {
-            account_info_handler_.set_result(BriefAccountInfo{});
-            return finish(td::Status::OK());
-        }
-        else {
-            return finish(td::Status::Error("account is empty"));
+        switch (mode_) {
+            case Mode::get_account_info: {
+                account_info_handler_.set_result(BriefAccountInfo{});
+                return finish(td::Status::OK());
+            }
+            case Mode::find_message_by_hash: {
+                // TODO: wait until contract is deployed. However how to get gen_utime?!
+
+                message_found_handler_.set_result(BriefMessageInfo{.found = false});
+                return finish(td::Status::OK());
+            }
+            default:
+                return finish(td::Status::Error("account is empty"));
         }
     }
 
@@ -154,13 +176,23 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
                         first_transaction_hash_ = last_transaction_hash_;
                         return check(run_remote());
                     }
+                case Mode::find_message_by_hash:
+                    state_ = State::waiting_transaction;
+                    return get_last_transactions(16);
                 default:
                     break;
             }
         }
         case State::waiting_transaction: {
             if (still_same_transaction && account_info_.gen_utime > expires_at_) {
-                return finish(td::Status::Error("message expired"));
+                switch (mode_) {
+                    case Mode::find_message_by_hash: {
+                        message_found_handler_.set_value(BriefMessageInfo{.found = false});
+                        return finish(td::Status::OK());
+                    }
+                    default:
+                        return finish(td::Status::Error("message expired"));
+                }
             }
 
             if (still_same_transaction) {
@@ -168,7 +200,7 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
                 alarm_timestamp() = td::Timestamp::in(1.0);
             }
             else {
-                get_last_transaction();
+                get_last_transactions(1);
             }
             return;
         }
@@ -179,7 +211,7 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
     CHECK(false)
 }
 
-void Wallet::get_last_transaction()
+void Wallet::get_last_transactions(td::int32 count)
 {
     LOG(DEBUG) << "get last transaction " << last_transaction_lt_ << ":" << last_transaction_hash_.to_hex();
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<lite_api_ptr<lite_api::liteServer_transactionList>> R) mutable {
@@ -187,13 +219,13 @@ void Wallet::get_last_transaction()
             td::actor::send_closure(SelfId, &Wallet::finish, R.move_as_error());
         }
         else {
-            td::actor::send_closure(SelfId, &Wallet::got_last_transaction, R.move_as_ok());
+            td::actor::send_closure(SelfId, &Wallet::got_last_transactions, R.move_as_ok());
         }
     });
-    client_.send_query(lite_api::liteServer_getTransactions(1, to_lite_api(addr_), last_transaction_lt_, last_transaction_hash_), std::move(P));
+    client_.send_query(lite_api::liteServer_getTransactions(count, to_lite_api(addr_), last_transaction_lt_, last_transaction_hash_), std::move(P));
 }
 
-void Wallet::got_last_transaction(lite_api_ptr<lite_api::liteServer_transactionList>&& transactions_list)
+void Wallet::got_last_transactions(lite_api_ptr<lite_api::liteServer_transactionList>&& transactions_list)
 {
     LOG(DEBUG) << "got last transaction " << last_transaction_lt_ << ":" << last_transaction_hash_.to_hex();
 
@@ -204,33 +236,59 @@ void Wallet::got_last_transaction(lite_api_ptr<lite_api::liteServer_transactionL
     auto list = list_r.move_as_ok();
 
     if (list.empty()) {
-        return finish(td::Status::Error("no transactions found"));
+        if (wait_until_appears_) {
+            return get_last_block_state();
+        }
+
+        if (mode_ == Mode::find_message_by_hash) {
+            message_found_handler_.set_value(BriefMessageInfo{.found = false});
+            return finish(td::Status::OK());
+        }
     }
 
-    block::gen::Transaction::Record transaction;
-    if (!tlb::unpack_cell_inexact(std::move(list[0]), transaction)) {
-        return finish(td::Status::Error("failed to unpack transaction"));
+    for (auto&& i : list) {
+        block::gen::Transaction::Record transaction;
+        if (!tlb::unpack_cell_inexact(std::move(i), transaction)) {
+            return finish(td::Status::Error("failed to unpack transaction"));
+        }
+
+        if (auto in_msg_ref = transaction.r1.in_msg->prefetch_ref();
+            in_msg_ref.not_null() && in_msg_ref->get_hash().bits().equals(message_hash_.cbits(), 256u)) {
+            return finish(found_transaction(std::move(transaction)));
+        }
+
+        const auto all_transactions_found = transaction.now <= created_at_ ||                      //
+                                            transaction.prev_trans_lt == first_transaction_lt_ &&  //
+                                                transaction.prev_trans_hash == first_transaction_hash_;
+
+        if (!all_transactions_found) {
+            last_transaction_lt_ = transaction.prev_trans_lt;
+            last_transaction_hash_ = transaction.prev_trans_hash;
+            continue;
+        }
+
+        if (wait_until_appears_) {
+            LOG(DEBUG) << "All transactions found";
+
+            first_transaction_lt_ = last_transaction_lt_ = account_info_.last_trans_lt;
+            first_transaction_hash_ = last_transaction_hash_ = account_info_.last_trans_hash;
+            return get_last_block_state();
+        }
+        else {
+            LOG(DEBUG) << "Transaction not found";
+
+            switch (mode_) {
+                case Mode::find_message_by_hash: {
+                    message_found_handler_.set_value(BriefMessageInfo{.found = false});
+                    return finish(td::Status::OK());
+                }
+                default:
+                    return finish(td::Status::Error("transaction not found"));
+            }
+        }
     }
 
-    if (auto in_msg_ref = transaction.r1.in_msg->prefetch_ref(); in_msg_ref.not_null() && in_msg_ref->get_hash() == message_hash_) {
-        return finish(found_transaction(std::move(transaction)));
-    }
-
-    const auto all_transactions_found = transaction.prev_trans_lt == first_transaction_lt_ &&  //
-                                        transaction.prev_trans_hash == first_transaction_hash_;
-
-    if (all_transactions_found) {
-        LOG(DEBUG) << "All transactions found";
-
-        first_transaction_lt_ = last_transaction_lt_ = account_info_.last_trans_lt;
-        first_transaction_hash_ = last_transaction_hash_ = account_info_.last_trans_hash;
-        get_last_block_state();
-    }
-    else {
-        last_transaction_lt_ = transaction.prev_trans_lt;
-        last_transaction_hash_ = transaction.prev_trans_hash;
-        get_last_transaction();
-    }
+    get_last_transactions(1);
 }
 
 auto Wallet::run_local() -> td::Status
@@ -257,8 +315,9 @@ auto Wallet::run_remote() -> td::Status
     function_ = std::move(function);
 
     auto message = ton::GenericAccount::create_ext_message(addr_, state_init, body);
+    created_at_ = static_cast<td::uint32>(context_->created_at() / 1000u);
     expires_at_ = context_->expires_at();
-    message_hash_ = message->get_hash();
+    message_hash_ = message->get_hash().bits();
 
     check(context_->handle_prepared(message));
 
@@ -300,6 +359,13 @@ auto Wallet::found_transaction(block::gen::Transaction::Record&& transaction) ->
 {
     LOG(DEBUG) << "Found transaction";
 
+    if (mode_ == Mode::find_message_by_hash) {
+        message_found_handler_.set_value(BriefMessageInfo{.found = true, .gen_utime = transaction.now});
+        return td::Status::OK();
+    }
+
+    CHECK(mode_ == Mode::send_message)
+
     if (!function_->has_output()) {
         return context_->handle_result({});
     }
@@ -340,6 +406,9 @@ void Wallet::check(td::Status status)
                 break;
             case Mode::send_message:
                 context_->handle_error(status.move_as_error());
+                break;
+            case Mode::find_message_by_hash:
+                message_found_handler_.set_error(status.move_as_error());
                 break;
             default:
                 CHECK(false)

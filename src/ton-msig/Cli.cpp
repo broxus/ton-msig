@@ -9,6 +9,16 @@
 
 namespace app
 {
+namespace
+{
+auto without_prefix(const std::string& str) -> td::Slice
+{
+    const auto prefix_offset = ((str[1] == 'x') << 1u);
+    return td::Slice{str.c_str() + prefix_offset, str.size() - prefix_offset};
+}
+
+}  // namespace
+
 MnemonicsValidator::MnemonicsValidator()
     : CLI::Validator(type_name)
 {
@@ -86,34 +96,36 @@ PubKeyValidator::PubKeyValidator()
     : CLI::Validator(type_name)
 {
     func_ = [](std::string& str) -> std::string {
-        constexpr auto prefix_length = 2u;  // "0x"
         constexpr auto key_length = 64u;
         constexpr auto error_prefix = "Invalid public key value: ";
 
-        const char* start;
-        if (const auto size = str.size(); size == key_length) {
-            start = str.c_str();
-        }
-        else if (size == key_length + prefix_length && str[0] == '0' && str[1] == 'x') {
-            start = str.c_str() + prefix_length;
-        }
-        else {
+        if (!is_hex_string(str, key_length)) {
             return error_prefix + str;
         }
 
-        for (size_t i = 0; i < key_length; ++i) {
-            const auto c = start[i];
-
-            if (!td::is_hex_digit(c)) {
-                return error_prefix + str;
-            }
-        }
-
-        auto decoded_r = td::hex_decode(td::Slice{start});
+        auto decoded_r = td::hex_decode(without_prefix(str));
         if (decoded_r.is_error()) {
             return error_prefix + str;
         }
         str = decoded_r.move_as_ok();
+
+        return std::string{};
+    };
+}
+
+HexValidator::HexValidator(size_t length)
+    : CLI::Validator(type_name)
+{
+    func_ = [length](std::string& str) -> std::string {
+        constexpr auto error_prefix = "Invalid hex value: ";
+
+        if (!is_hex_string(str, length)) {
+            return error_prefix + str;
+        }
+
+        if (str[1] == 'x') {
+            str.erase(0, 2);
+        }
 
         return std::string{};
     };
@@ -138,14 +150,36 @@ auto is_mnemonics(const std::string& str) -> bool
     return word_count == 12;
 }
 
-auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>
+auto is_hex_string(const std::string& str, size_t length) -> bool
 {
-    if (is_mnemonics(str)) {
-        TRY_RESULT(mnemonic, tonlib::Mnemonic::create(td::SecureString{str}, {}))
-        return mnemonic.to_private_key();
+    constexpr auto prefix_length = 2u;  // "0x"
+
+    const char* start;
+    if (const auto size = str.size(); size == length) {
+        start = str.c_str();
+    }
+    else if (size == length + prefix_length && str[0] == '0' && str[1] == 'x') {
+        start = str.c_str() + prefix_length;
     }
     else {
-        TRY_RESULT(keys_file, td::read_file(str))
+        return false;
+    }
+
+    for (size_t i = 0; i < length; ++i) {
+        if (!td::is_hex_digit(start[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>
+{
+    auto file_r = td::read_file(str);
+
+    if (file_r.is_ok()) {
+        auto keys_file = file_r.move_as_ok();
         TRY_RESULT(json, td::json_decode(keys_file.as_slice()))
         auto& root = json.get_object();
         TRY_RESULT(secret, td::get_json_object_string_field(root, "secret", false))
@@ -157,5 +191,70 @@ auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>
 
         return ton::privkeys::Ed25519{private_key_data.as_slice()}.export_key();
     }
+    else if (is_mnemonics(str)) {
+        TRY_RESULT(mnemonic, tonlib::Mnemonic::create(td::SecureString{str}, {}))
+        return mnemonic.to_private_key();
+    }
+    else {
+        return file_r.move_as_error();
+    }
 }
+
+auto parse_hash(td::Slice data) -> td::Result<td::Bits256>
+{
+    td::Bits256 hash_data{};
+    if (hash_data.from_hex(data) <= 0) {
+        return td::Status::Error("Invalid message hash");
+    }
+
+    return hash_data;
+}
+
+auto load_message_info(const std::string& str) -> td::Result<MessageInfo>
+{
+    auto fie_r = td::read_file(str);
+
+    if (fie_r.is_ok()) {
+        auto msg_info_file = fie_r.move_as_ok();
+        TRY_RESULT(json, td::json_decode(msg_info_file.as_slice()))
+        auto& root = json.get_object();
+
+        MessageInfo info;
+        for (const auto& [key, value] : root) {
+            if (key == "message_hash") {
+                if (value.type() != td::JsonValue::Type::String) {
+                    return td::Status::Error("expected message_hash as string");
+                }
+                auto& hash = info.hash;
+                TRY_RESULT_ASSIGN(hash, parse_hash(value.get_string()))
+            }
+            else if (key == "created_at") {
+                if (value.type() != td::JsonValue::Type::Number) {
+                    return td::Status::Error("expected created_at as number");
+                }
+                auto& created_at = info.created_at;
+                TRY_RESULT_ASSIGN(created_at, td::to_integer_safe<td::uint64>(value.get_number()))
+            }
+            else if (key == "expires_at") {
+                if (value.type() != td::JsonValue::Type::Number) {
+                    return td::Status::Error("expected expires_at as number");
+                }
+                auto& expires_at = info.expires_at;
+                TRY_RESULT_ASSIGN(expires_at, td::to_integer_safe<td::uint32>(value.get_number()))
+            }
+        }
+        return info;
+    }
+    else if (is_hex_string(str, 64u)) {
+        MessageInfo info;
+        auto& hash = info.hash;
+        TRY_RESULT_ASSIGN(hash, parse_hash(without_prefix(str)))
+
+        return info;
+    }
+    else {
+        return fie_r.move_as_error();
+    }
+}
+
 }  // namespace app

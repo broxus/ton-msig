@@ -21,6 +21,7 @@ using namespace tonlib;
 class Wallet final : public td::actor::Actor {
     enum class Mode {
         get_account_info,
+        find_message_by_hash,
         send_message,
     };
 
@@ -41,9 +42,24 @@ public:
         ton::UnixTime sync_time{};
     };
 
+    struct BriefMessageInfo {
+        bool found{};
+        td::uint32 gen_utime{};
+    };
+
     using AccountInfoHandler = td::Promise<BriefAccountInfo>;
+    using MessageFoundHandler = td::Promise<BriefMessageInfo>;
+
+    struct FindMessage {
+        MessageFoundHandler promise;
+        td::Bits256 message_hash{};
+        td::uint64 created_at{};
+        td::uint32 expires_at{};
+        bool wait{};
+    };
 
     Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, AccountInfoHandler&& promise);
+    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, FindMessage&& action);
     Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context);
 
 private:
@@ -56,8 +72,8 @@ private:
     void get_account_state();
     void got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&& account_state);
 
-    void get_last_transaction();
-    void got_last_transaction(lite_api_ptr<lite_api::liteServer_transactionList>&& transactions_list);
+    void get_last_transactions(td::int32 count);
+    void got_last_transactions(lite_api_ptr<lite_api::liteServer_transactionList>&& transactions_list);
 
     auto run_local() -> td::Status;
     auto run_remote() -> td::Status;
@@ -80,6 +96,7 @@ private:
     block::StdAddress addr_;
     ton::BlockIdExt last_block_id_{};
     block::AccountState::Info account_info_{};
+    bool wait_until_appears_{};
 
     ton::LogicalTime first_transaction_lt_{};
     ton::Bits256 first_transaction_hash_{};
@@ -87,13 +104,15 @@ private:
     ton::LogicalTime last_transaction_lt_{};
     ton::Bits256 last_transaction_hash_{};
 
+    td::uint32 created_at_{};
     td::uint32 expires_at_{};
 
     ftabi::FunctionRef function_{};
-    vm::CellHash message_hash_{};
+    td::Bits256 message_hash_{};
 
     std::unique_ptr<ActionBase> context_{};
     AccountInfoHandler account_info_handler_{};
+    MessageFoundHandler message_found_handler_{};
 };
 
 }  // namespace app

@@ -28,7 +28,13 @@ struct PubKeyValidator : public CLI::Validator {
     constexpr static auto type_name = "PUBKEY";
 };
 
+struct HexValidator : public CLI::Validator {
+    explicit HexValidator(size_t length = 64u);
+    constexpr static auto type_name = "HEX";
+};
+
 auto is_mnemonics(const std::string& str) -> bool;
+auto is_hex_string(const std::string& str, size_t length) -> bool;
 
 template <typename T = int>
 auto check_result(td::Result<T>&& result, const std::string& prefix = "") -> T
@@ -40,7 +46,13 @@ auto check_result(td::Result<T>&& result, const std::string& prefix = "") -> T
     return result.move_as_ok();
 }
 
-
 auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>;
+
+struct MessageInfo {
+    td::Bits256 hash{};
+    td::uint64 created_at{0};
+    td::uint32 expires_at{std::numeric_limits<td::uint32>::max()};
+};
+auto load_message_info(const std::string& str) -> td::Result<MessageInfo>;
 
 }  // namespace app

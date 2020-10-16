@@ -42,6 +42,7 @@ int main(int argc, char** argv)
     td::actor::ActorOwn<App> app;
 
     std::function<std::unique_ptr<ActionBase>(const td::actor::ActorId<App>&)> action_make_request;
+    std::function<Wallet::FindMessage(const td::actor::ActorId<App>&)> action_find_message;
     std::function<td::Promise<Wallet::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
 
     CLI::App cmd{PROJECT_NAME};
@@ -205,6 +206,38 @@ int main(int argc, char** argv)
                           << R"(  "last_transaction_hash": ")" << info.last_transaction_hash.to_hex() << "\",\n"
                           << R"(  "sync_utime": )" << info.sync_time << "\n}" << std::endl;
             });
+        };
+    });
+
+    // Subcommand: find
+
+    auto* cmd_find = cmd.add_subcommand("find", "Find entity by id")->require_subcommand()->needs(address_option);
+    auto* cmd_find_message = cmd_find->add_subcommand("message", "Find message by hash");
+    MessageInfo message_info;
+    cmd_find_message
+        ->add_option_function<std::string>(
+            "hash",
+            [&](const std::string& str) { message_info = check_result(load_message_info(str)); },
+            "Message hash or path to message info")
+        ->check(CLI::ExistingFile | HexValidator{})  // raw hash not supported yet
+        ->required();
+    bool dont_wait_until_appears = false;
+    cmd_find_message->add_flag("--no-wait", dont_wait_until_appears, "Don't wait for the message you are looking for");
+    cmd_find_message->callback([&] {
+        action_find_message = [&](const td::actor::ActorId<App>& actor_id) {
+            using Result = Wallet::BriefMessageInfo;
+            return Wallet::FindMessage{
+                create_handler<Result>(
+                    actor_id,
+                    [&](Result&& result) {
+                        std::cout << "{\n"
+                                  << R"(  "found": )" << (result.found ? "true" : "false") << ",\n"
+                                  << R"(  "gen_utime": )" << result.gen_utime << "\n}" << std::endl;
+                    }),
+                message_info.hash,
+                message_info.created_at,
+                message_info.expires_at,
+                !dont_wait_until_appears};
         };
     });
 
@@ -454,6 +487,9 @@ int main(int argc, char** argv)
         }
         if (action_get_account_info) {
             td::actor::send_closure(app, &App::get_account_info, address, action_get_account_info(app.get()));
+        }
+        if (action_find_message) {
+            td::actor::send_closure(app, &App::find_message, address, action_find_message(app.get()));
         }
         app.release();
     });

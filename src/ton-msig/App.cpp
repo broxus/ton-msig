@@ -28,6 +28,12 @@ void App::get_account_info(const block::StdAddress& addr, td::Promise<Wallet::Br
     actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(promise));
 }
 
+void App::find_message(const block::StdAddress& addr, Wallet::FindMessage&& action)
+{
+    auto id = actor_id_++;
+    actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(action));
+}
+
 void App::start_up()
 {
     config_ = tonlib::Config::parse(options_.config.as_slice().str()).move_as_ok();
