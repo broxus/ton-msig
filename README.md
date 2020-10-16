@@ -51,6 +51,11 @@ deploy
 info
   Get account info
 
+find
+  Find entity by id
+  Subcommands:
+    message                                   Find message by hash
+
 submitTransaction
   Create new transaction
   Positionals:

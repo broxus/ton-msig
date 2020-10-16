@@ -219,7 +219,7 @@ int main(int argc, char** argv)
             "hash",
             [&](const std::string& str) { message_info = check_result(load_message_info(str)); },
             "Message hash or path to message info")
-        ->check(CLI::ExistingFile | HexValidator{})  // raw hash not supported yet
+        ->check(CLI::ExistingFile /* | HexValidator{} */)  // raw hash not supported yet
         ->required();
     bool dont_wait_until_appears = false;
     cmd_find_message->add_flag("--no-wait", dont_wait_until_appears, "Don't wait for the message you are looking for");
