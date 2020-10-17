@@ -31,6 +31,11 @@ Subcommands:
 convert
   Convert address into another formats
 
+getpubkey
+  Get public key from private
+  Positionals:
+    privkey TEXT:KEY REQUIRED                 Private key hex
+
 generate
   Generate new keypair
   Options:
@@ -43,7 +48,7 @@ deploy
   Options:
     -s,--sign TEXT:FILE REQUIRED              Path to keypair file
     -w,--workchain INT:INT in [-1 - 0]        Workchain
-    -o,--owner TEXT:PUBKEY ... REQUIRED       Custodian public key
+    -o,--owner TEXT:KEY ... REQUIRED          Custodian public key
     -r,--req-confirms UINT:INT in [1 - 32]=1  Number of confirmations required for executing transaction
     --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
     --save TEXT                               Save message info to file

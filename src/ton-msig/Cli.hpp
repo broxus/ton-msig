@@ -23,9 +23,9 @@ struct TonValidator : public CLI::Validator {
     constexpr static auto type_name = "TON";
 };
 
-struct PubKeyValidator : public CLI::Validator {
-    PubKeyValidator();
-    constexpr static auto type_name = "PUBKEY";
+struct KeyValidator : public CLI::Validator {
+    KeyValidator();
+    constexpr static auto type_name = "KEY";
 };
 
 struct HexValidator : public CLI::Validator {

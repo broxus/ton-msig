@@ -115,6 +115,25 @@ int main(int argc, char** argv)
         std::exit(0);
     });
 
+    // Subcommand: getpubkey
+
+    auto cmd_getpubkey = cmd.add_subcommand("getpubkey", "Get public key from private");
+    cmd_getpubkey
+        ->add_option_function<std::string>(
+            "privkey",
+            [&](const std::string& str) {
+                key = td::Ed25519::PrivateKey{td::SecureString{str.data(), str.size()}};
+            },
+            "Private key hex")
+        ->transform(KeyValidator{})
+        ->required();
+    cmd_getpubkey->callback([&] {
+        CHECK(key.has_value())
+        const auto public_key = check_result(key->get_public_key());
+        std::cout << "{\n  \"public\": \"" << cppcodec::hex_lower::encode(public_key.as_octet_string()) << "\"\n}" << std::endl;
+        std::exit(0);
+    });
+
     // Subcommand: generate
 
     auto* cmd_generate = cmd.add_subcommand("generate", "Generate new keypair");
@@ -157,7 +176,7 @@ int main(int argc, char** argv)
                 }
             },
             "Custodian public key")
-        ->transform(PubKeyValidator{})
+        ->transform(KeyValidator{})
         ->expected(-1)
         ->required();
     td::uint8 req_confirms{1};

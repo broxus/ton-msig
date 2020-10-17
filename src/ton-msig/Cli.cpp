@@ -92,12 +92,12 @@ TonValidator::TonValidator()
     };
 }
 
-PubKeyValidator::PubKeyValidator()
+KeyValidator::KeyValidator()
     : CLI::Validator(type_name)
 {
     func_ = [](std::string& str) -> std::string {
         constexpr auto key_length = 64u;
-        constexpr auto error_prefix = "Invalid public key value: ";
+        constexpr auto error_prefix = "Invalid key value: ";
 
         if (!is_hex_string(str, key_length)) {
             return error_prefix + str;
