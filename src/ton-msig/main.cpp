@@ -45,44 +45,46 @@ int main(int argc, char** argv)
     std::function<Wallet::FindMessage(const td::actor::ActorId<App>&)> action_find_message;
     std::function<td::Promise<Wallet::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
 
+    CliState cli{};
+
     CLI::App cmd{PROJECT_NAME};
     cmd.get_formatter()->column_width(44);
     cmd.set_help_all_flag("--help-all", "Print extended help message and exit");
     cmd.set_version_flag("-v,--version", PROJECT_VER);
 
-    block::StdAddress address;
     auto address_option = cmd.add_option_function<std::string>(
                                  "addr",
-                                 [&](const std::string& addr) { CHECK(address.parse_addr(addr)) },
+                                 [&](const std::string& addr) { CHECK(cli.set<block::StdAddress>("address").parse_addr(addr)) },
                                  "Wallet contract address")
                               ->type_name(AddressValidator::type_name)
                               ->check(AddressValidator{});
 
-    int verbosity_level = verbosity_INFO;
-    cmd.add_option("-l,--log-level", verbosity_level, "Log verbosity level", true)->check(CLI::Range(1, 7));
+    cmd.add_option("-l,--log-level", cli.set<int>("verbosity_level", verbosity_INFO), "Log verbosity level", true)->check(CLI::Range(1, 7));
 
-    td::size_t thread_count = 2u;
-    cmd.add_option("-t,--threads", thread_count, "Thread count", true)->check(CLI::PositiveNumber);
+    cmd.add_option("-t,--threads", cli.set<td::size_t>("thread_count", 2u), "Thread count", true)->check(CLI::PositiveNumber);
 
-    td::BufferSlice global_config{MAINNET_CONFIG_JSON, std::size(MAINNET_CONFIG_JSON)};
+    std::any test(std::in_place_type<td::BufferSlice>, td::Slice{MAINNET_CONFIG_JSON, std::size(MAINNET_CONFIG_JSON)});
+
+    cli.set<td::BufferSlice>("global_config", td::Slice{MAINNET_CONFIG_JSON, std::size(MAINNET_CONFIG_JSON)});
     cmd.add_option_function<std::string>(
            "-c,--config",
-           [&](const std::string& path) { global_config = check_result(td::read_file(path)); },
+           [&](const std::string& path) { cli.set<td::BufferSlice>("td::BufferSlice", check_result(td::read_file(path))); },
            "Path to global config")
         ->check(CLI::ExistingFile);
 
     // subcommands helpers
 
     std::optional<td::Ed25519::PrivateKey> key;
-    const auto add_signature_option = [&key](CLI::App* subcommand, const char* name = "-s,--sign") -> CLI::Option* {
-        return subcommand
+    const auto add_signature_option = [&key](CLI::App* subcommand, const char* name = "-s,--sign") -> CLI::
+                                                                                                       Option* {
+                                                                                                           return subcommand
             ->add_option_function<std::string>(
                 name,
                 [&](const std::string& key_data) { key = check_result(load_key(key_data)); },
                 "Path to keypair file")
             ->check(CLI::ExistingFile /* | MnemonicsValidator{} */) // mnemonics not supported now
             ->required();
-    };
+                                                                                                       };
 
     bool force_local = false;
     const auto add_force_local_option = [&force_local](CLI::App* subcommand) -> CLI::Option* {
@@ -106,6 +108,8 @@ int main(int argc, char** argv)
 
     // Subcommand: convert
     cmd.add_subcommand("convert", "Convert address into another formats")->needs(address_option)->callback([&] {
+        auto& address = cli.get<block::StdAddress>("address");
+
         std::cout << "{\n"
                   << R"(  "raw": ")" << address.workchain << ":" << address.addr.to_hex() << "\",\n"
                   << R"(  "packed": ")" << (address.bounceable = false, address.rserialize()) << "\",\n"
@@ -188,9 +192,8 @@ int main(int argc, char** argv)
     cmd_deploy->callback([&] {
         const auto public_key = check_result(key->get_public_key());
         const auto addr = check_result(Contract::generate_addr(public_key));
-        address = block::StdAddress{workchain, addr, false};
 
-        action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
+        action_make_request = [&, address = block::StdAddress{workchain, addr, false}](const td::actor::ActorId<App>& actor_id) {
             const auto now = now_ms();
             const auto expire = now / 1000 + msg_timeout;
             CHECK(key.has_value())
@@ -300,6 +303,8 @@ int main(int argc, char** argv)
     add_msg_info_path_option(cmd_submit_transaction);
     cmd_submit_transaction->callback([&] {
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
+            const auto& address = cli.get<block::StdAddress>("address");
+
             const auto now = now_ms();
             const auto expire = now / 1000 + msg_timeout;
             CHECK(key.has_value())
@@ -335,6 +340,8 @@ int main(int argc, char** argv)
     add_msg_info_path_option(cmd_confirm_transaction);
     cmd_confirm_transaction->callback([&] {
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
+            const auto& address = cli.get<block::StdAddress>("address");
+
             const auto now = now_ms();
             const auto expire = now / 1000 + msg_timeout;
             CHECK(key.has_value())
@@ -495,12 +502,14 @@ int main(int argc, char** argv)
     cmd.require_subcommand();
 
     CLI11_PARSE(cmd, argc, argv)
-    SET_VERBOSITY_LEVEL(verbosity_level);
+    SET_VERBOSITY_LEVEL(cli.get<int>("verbosity_level"));
     td::set_default_failure_signal_handler();
 
-    td::actor::Scheduler scheduler({thread_count});
-    scheduler.run_in_context([&] { app = App::create({std::move(global_config)}); });
+    td::actor::Scheduler scheduler({cli.get<td::size_t>("thread_count")});
+    scheduler.run_in_context([&] { app = App::create({std::move(cli.get<td::BufferSlice>("global_config"))}); });
     scheduler.run_in_context([&] {
+        const auto& address = cli.get<block::StdAddress>("address");
+
         if (action_make_request) {
             td::actor::send_closure(app, &App::make_request, address, action_make_request(app.get()));
         }

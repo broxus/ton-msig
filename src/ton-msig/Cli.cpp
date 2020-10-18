@@ -256,5 +256,4 @@ auto load_message_info(const std::string& str) -> td::Result<MessageInfo>
         return fie_r.move_as_error();
     }
 }
-
 }  // namespace app
