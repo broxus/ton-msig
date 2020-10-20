@@ -2,226 +2,168 @@
 
 #ifdef MSIG_WITH_API
 
+#include <res/config.h>
+
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
+#include <boost/config.hpp>
+
 #include "App.hpp"
 
 namespace app
 {
+namespace beast = boost::beast;
+namespace http = beast::http;
+
+namespace mime_type
+{
+constexpr auto application_json = "application/json";
+
+}  // namespace mime_type
+
+namespace http_error
+{
+#define DEFINE_ERROR(var) constexpr auto var = #var;
+
+DEFINE_ERROR(unknown_http_body)
+}  // namespace http_error
+
 namespace
 {
-enum class Method {
-    GET,
-    POST,
-};
-
-constexpr auto MAX_POST_SIZE = 64u << 10u;
-
-auto url_decode(td::Slice from, bool decode_plus_sign_as_space) -> std::string
+template <typename B, class Body, class Allocator>
+auto make_response(const http::request<Body, http::basic_fields<Allocator>>& req, http::status status) -> http::response<B>
 {
-    td::BufferSlice x{from.size()};
-    auto to = x.as_slice();
-
-    size_t to_i = 0;
-    for (size_t from_i = 0, n = from.size(); from_i < n; ++from_i) {
-        if (from[from_i] == '%' && from_i + 2 < n) {
-            int high = td::hex_to_int(from[from_i + 1]);
-            int low = td::hex_to_int(from[from_i + 2]);
-            if (high < 16 && low < 16) {
-                to[to_i++] = static_cast<char>(high * 16 + low);
-                from_i += 2;
-                continue;
-            }
-        }
-
-        if (const auto c = from[from_i]; decode_plus_sign_as_space && c == '+') {
-            to[to_i] = ' ';
-        }
-
-        ++to_i;
-    }
-
-    return to.truncate(to_i).str();
+    http::response<B> res{status, req.version()};
+    res.set(http::field::server, PROJECT_NAME);
+    res.set(http::field::content_type, mime_type::application_json);
+    res.keep_alive(req.keep_alive());
+    return res;
 }
-
 }  // namespace
 
-class HttpQueryRunner {
+class SessionActor final : public td::actor::Actor {
 public:
-    HttpQueryRunner(td::actor::Scheduler* scheduler, std::function<void(td::Promise<MHD_Response*>)> func)
+    explicit SessionActor(td::actor::ActorShared<> parent, tcp::socket&& socket)
+        : parent_{std::move(parent)}
+        , socket_{std::move(socket)}
     {
-        auto P = td::PromiseCreator::lambda([Self = this](td::Result<MHD_Response*> R) {
-            if (R.is_ok()) {
-                Self->finish(R.move_as_ok());
-            }
-            else {
-                Self->finish(nullptr);
-            }
-        });
-        mutex_.lock();
-        scheduler->run_in_context_external([&]() { func(std::move(P)); });
-    }
-
-    void finish(MHD_Response* response)
-    {
-        response_ = response;
-        mutex_.unlock();
-    }
-
-    MHD_Response* wait()
-    {
-        mutex_.lock();
-        mutex_.unlock();
-        return response_;
     }
 
 private:
-    std::function<void(td::Promise<MHD_Response*>)> func_;
-    MHD_Response* response_;
-    std::mutex mutex_;
+    void start_up() final { tick(); }
+
+    void finish(td::Status status)
+    {
+        if (status.is_error()) {
+            LOG(ERROR) << status;
+        }
+        socket_.shutdown(tcp::socket::shutdown_send, ec_);
+        stop();
+    }
+
+    void tick()
+    {
+        http::request<http::string_body> req;
+
+        http::read(socket_, buffer_, req, ec_);
+        if (ec_ == http::error::end_of_stream) {
+            return finish(td::Status::OK());
+        }
+        else if (ec_) {
+            return finish(td::Status::Error(ec_.message()));
+        }
+
+        handle_request(std::move(req));
+
+        if (ec_) {
+            return finish(td::Status::Error(ec_.message()));
+        }
+        if (close_) {
+            return finish(td::Status::OK());
+        }
+
+        td::actor::send_closure(actor_id(this), &SessionActor::tick);
+    }
+
+    template <bool isRequest, class Body, class Fields>
+    void send(http::message<isRequest, Body, Fields>&& msg)
+    {
+        close_ = msg.need_eof();
+        http::serializer<isRequest, Body, Fields> sr{msg};
+        http::write(socket_, sr, ec_);
+    }
+
+    template <class Body, class Allocator>
+    auto bad_request(const http::request<Body, http::basic_fields<Allocator>>& req, beast::string_view why)
+    {
+        auto res = make_response<http::string_body>(req, http::status::bad_request);
+        res.body() = R"({"error":")" + std::string{why} + "\"}";
+        res.prepare_payload();
+        return res;
+    }
+
+    template <class Body, class Allocator>
+    auto not_found(const http::request<Body, http::basic_fields<Allocator>>& req)
+    {
+        auto res = make_response<http::empty_body>(req, http::status::not_found);
+        res.prepare_payload();
+        return res;
+    }
+
+    template <class Body, class Allocator>
+    auto server_error(const http::request<Body, http::basic_fields<Allocator>>& req, beast::string_view what)
+    {
+        auto res = make_response<http::string_body>(req, http::status::internal_server_error);
+        res.body() = "An error occurred: '" + std::string(what) + "'";
+        res.prepare_payload();
+        return res;
+    }
+
+    template <class Body, class Allocator>
+    void handle_request(http::request<Body, http::basic_fields<Allocator>>&& req)
+    {
+        switch (req.method()) {
+            case http::verb::head: {
+                auto res = make_response<http::empty_body>(req, http::status::ok);
+                return send(std::move(res));
+            }
+            case http::verb::get: {
+                auto res = make_response<http::empty_body>(req, http::status::ok);
+                return send(std::move(res));
+            }
+            default: {
+                return send(bad_request(req, http_error::unknown_http_body));
+            }
+        }
+    }
+
+    td::actor::ActorShared<> parent_;
+    tcp::socket socket_;
+
+    beast::flat_buffer buffer_{};
+    bool close_{};
+    beast::error_code ec_{};
 };
 
-class HttpRequestExtra {
-public:
-    HttpRequestExtra(MHD_Connection* connection, Method method)
-    {
-        if (method == Method::POST) {
-            post_processor_ = MHD_create_post_processor(connection, 1u << 14u, reinterpret_cast<MHD_PostDataIterator>(iterate_post), static_cast<void*>(this));
-        }
-    }
-    ~HttpRequestExtra()
-    {
-        if (post_processor_ != nullptr) {
-            MHD_destroy_post_processor(post_processor_);
-        }
-    }
-
-    [[nodiscard]] auto post_processor() -> MHD_PostProcessor* { return post_processor_; }
-    [[nodiscard]] auto options() -> std::map<std::string, std::string> { return options_; }
-
-    static int iterate_post(
-        void* connection_info,
-        MHD_ValueKind kind,
-        const char* key,
-        const char* filename,
-        const char* content_type,
-        const char* transfer_encoding,
-        const char* data,
-        uint64_t off,
-        size_t size)
-    {
-        auto self = static_cast<HttpRequestExtra*>(connection_info);
-        self->total_size += std::strlen(key) + size;
-        if (self->total_size > MAX_POST_SIZE) {
-            return MHD_NO;
-        }
-        std::string k = key;
-        if (self->options_[k].size() < off + size) {
-            self->options_[k].resize(off + size);
-        }
-        td::MutableSlice{self->options_[k]}.remove_prefix(off).copy_from(td::Slice{data, size});
-        return MHD_YES;
-    }
-
-private:
-    MHD_PostProcessor* post_processor_{};
-    std::map<std::string, std::string> options_{};
-    td::uint64 total_size{};
-};
+Api::Api(td::actor::ActorShared<App> parent, td::int16 port)
+    : parent_{std::move(parent)}
+{
+    const auto address = net::ip::make_address("127.0.0.1");
+}
 
 void Api::start_up()
 {
-    self_id_ = actor_id(this);
-    daemon_ = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY, http_port_, nullptr, nullptr, );
+    Actor::start_up();
 }
 
 void Api::tear_down()
 {
-    if (daemon_) {
-        MHD_stop_daemon(daemon_);
-        daemon_ = nullptr;
-    }
+    Actor::tear_down();
 }
 
-void Api::alarm()
+void Api::tick()
 {
-}
-
-int Api::process_http_request(
-    void* /*cls*/,
-    struct MHD_Connection* connection,
-    const char* url,
-    const char* method_name,
-    const char* /*version*/,
-    const char* upload_data,
-    size_t* upload_data_size,
-    void** ptr)
-{
-    MHD_Response* response = nullptr;
-    int ret;
-
-    std::map<std::string, std::string> options;
-    if (std::strcmp(method_name, "GET") == 0) {
-        if (*ptr == nullptr) {
-            *ptr = static_cast<void*>(new HttpRequestExtra{connection, Method::GET});
-            return MHD_YES;
-        }
-        if (upload_data_size != nullptr && *upload_data_size != 0) {
-            return MHD_NO;
-        }
-    }
-    else if (std::strcmp(method_name, "POST") == 0) {
-        if (*ptr == nullptr) {
-            *ptr = static_cast<void*>(new HttpRequestExtra{connection, Method::POST});
-            return MHD_YES;
-        }
-
-        auto extra = static_cast<HttpRequestExtra*>(*ptr);
-        if (upload_data_size != nullptr && *upload_data_size != 0) {
-            auto post_processor = extra->post_processor();
-            CHECK(post_processor)
-            MHD_post_process(post_processor, upload_data, *upload_data_size);
-            *upload_data_size = 0;
-            return MHD_YES;
-        }
-
-        options = std::move(extra->options());
-    }
-    else {
-        return MHD_NO;
-    }
-    *ptr = nullptr;
-
-    std::string_view url_view{url};
-
-    auto pos = url_view.rfind('/');
-    std::string prefix, command;
-    if (pos == std::string::npos) {
-        prefix = "";
-        command = url_view;
-    }
-    else {
-        prefix = url_view.substr(0, pos + 1);
-        command = url_view.substr(pos + 1);
-    }
-
-    MHD_get_connection_values(connection, MHD_GET_ARGUMENT_KIND, reinterpret_cast<MHD_KeyValueIterator>(get_arg_iterate), static_cast<void*>(&options));
-
-    // TODO
-
-    return 0;
-}
-
-void Api::request_completed(void* /*cls*/, MHD_Connection* /*connection*/, void** ptr, MHD_RequestTerminationCode /*code*/)
-{
-    auto extra = static_cast<HttpRequestExtra*>(*ptr);
-    delete extra;
-}
-
-void Api::get_arg_iterate(void* cls, MHD_ValueKind /*kind*/, const char* key, const char* value)
-{
-    auto options = static_cast<std::map<std::string, std::string>*>(cls);
-    if (key && value && *key > 0 && *value > 0) {
-        options->emplace(key, url_decode(td::Slice{value}, false));
-    }
 }
 
 }  // namespace app

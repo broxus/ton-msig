@@ -88,7 +88,10 @@ target_link_libraries(${SUBPROJ_NAME} PRIVATE
         tonlib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope ftabi CLI11)
 
 if (MSIG_WITH_API)
-    target_compile_definitions(${SUBPROJ_NAME} PUBLIC "MSIG_WITH_API")
+    target_include_directories(${SUBPROJ_NAME} PRIVATE
+            ${PROJECT_ROOT_DIR}/extlibs/beast/include
+            ${PROJECT_ROOT_DIR}/extlibs/asio/include)
+    target_compile_definitions(${SUBPROJ_NAME} PRIVATE MSIG_WITH_API ASIO_STANDALONE BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
 endif ()
 
 # Size optimizations
