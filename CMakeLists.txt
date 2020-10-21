@@ -25,10 +25,15 @@ option(MSIG_WITH_API "Use \"ON\" to build with integrated server." OFF)
 
 # Extlibs
 set(WITH_GFLAGS OFF)
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+set(JSON_Install OFF CACHE INTERNAL "")
+
 add_subdirectory(${PROJECT_ROOT_DIR}/extlibs/ton EXCLUDE_FROM_ALL)
 add_subdirectory(${PROJECT_ROOT_DIR}/extlibs/CLI11 EXCLUDE_FROM_ALL)
 add_subdirectory(${PROJECT_ROOT_DIR}/extlibs/cppcodec EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_ROOT_DIR}/extlibs/json EXCLUDE_FROM_ALL)
 
+# Targets
 foreach (SUBPROJ ${SUBPROJECT_LIST})
     add_subdirectory(${SUBPROJ})
 endforeach ()

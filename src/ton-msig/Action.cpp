@@ -76,14 +76,13 @@ auto save_message_info(const std::optional<std::string>& path, td::uint64 create
 
     TRY_RESULT(encoded, vm::std_boc_serialize(message))
 
-    const auto data = PSLICE() << "{\n"
-                               << R"(  "created_at": )" << created_at << ",\n"
-                               << R"(  "expires_at": )" << expires_at << ",\n"
-                               << R"(  "message": ")" << td::base64_encode(encoded.as_slice()) << "\",\n"
-                               << R"(  "message_hash": ")" << message->get_hash().to_hex() << "\"\n"
-                               << "}\n";
+    const nlohmann::json data{
+        {"created_at", created_at},
+        {"expires_at", expires_at},
+        {"message", td::base64_encode(encoded.as_slice())},
+        {"message_hash", message->get_hash().to_hex()}};
 
-    return td::atomic_write_file(*path, data);
+    return td::atomic_write_file(*path, data.dump(4));
 }
 
 auto decode_parameters(const std::vector<ValueRef>& values) -> Parameters
@@ -109,7 +108,7 @@ auto decode_transaction(const ValueRef& value) -> Transaction
         .index = t.values[5]->as<ValueInt>().get<td::uint8>(),
         .dest = t.values[6]->as<ValueAddress>().value,
         .value = t.values[7]->as<ValueInt>().value,
-        .send_flags = t.values[8]->as<ValueInt>().get<td::uint16>(),
+        .sendFlags = t.values[8]->as<ValueInt>().get<td::uint16>(),
         // skip: t.values[9]->as<ValueCell>().value
         .bounce = t.values[10]->as<ValueBool>().value};
 }
@@ -124,6 +123,48 @@ auto decode_custodian(const ValueRef& value) -> Custodian
 }
 
 }  // namespace
+
+void to_json(nlohmann::json& j, const Parameters& v)
+{
+    j = nlohmann::json{
+        {"maxQueuedTransactions", v.max_queued_transactions},
+        {"maxCustodianCount", v.max_custodian_count},
+        {"expirationTime", v.expiration_time},
+        {"minValue", v.min_value.to_dec_string()},
+        {"requiredTxnConfirms", v.required_txn_confirms}};
+}
+
+void to_json(nlohmann::json& j, const Transaction& v)
+{
+    j = nlohmann::json{
+        {"id", v.id},
+        {"confirmationMask", v.confirmationMask},
+        {"signsRequired", v.signsRequired},
+        {"signsReceived", v.signsReceived},
+        {"creator", v.creator.to_hex_string()},
+        {"index", v.index},
+        {"dest", std::to_string(v.dest.workchain) + ":" + v.dest.addr.to_hex()},
+        {"value", v.value.to_dec_string()},
+        {"sendFlags", v.sendFlags},
+        {"bounce", v.bounce}};
+}
+
+void to_json(nlohmann::json& j, const Custodian& v)
+{
+    j = nlohmann::json{
+        {"index", v.index},  //
+        {"pubkey", v.pubkey.to_hex_string()}};
+}
+
+void to_json(nlohmann::json& j, const TransactionSent& v)
+{
+    j = nlohmann::json{{"transactionId", v.transactionId}};
+}
+
+void to_json(nlohmann::json& j, const Confirmation& v)
+{
+    j = nlohmann::json{{"confirmed", v.confirmed}};
+}
 
 // constructor
 
@@ -250,7 +291,7 @@ auto SubmitTransaction::handle_prepared(const td::Ref<vm::Cell>& message) -> td:
 auto SubmitTransaction::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
 {
     TRY_STATUS(check_output<SubmitTransaction>(result))
-    promise.set_result(result[0]->as<ValueInt>().get<td::uint64>());
+    promise.set_result(TransactionSent{result[0]->as<ValueInt>().get<td::uint64>()});
     return td::Status::OK();
 }
 
@@ -334,7 +375,7 @@ auto IsConfirmed::create_message() -> td::Result<EncodedMessage>
 auto IsConfirmed::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status
 {
     TRY_STATUS(check_output<IsConfirmed>(result))
-    promise.set_result(result[0]->as<ValueBool>().value);
+    promise.set_result(Confirmation{result[0]->as<ValueBool>().value});
     return td::Status::OK();
 }
 
@@ -510,4 +551,5 @@ auto GetCustodians::handle_result(std::vector<ftabi::ValueRef>&& result) -> td::
     promise.set_result(std::move(deserialized));
     return td::Status::OK();
 }
+
 }  // namespace app::msig

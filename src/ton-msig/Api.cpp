@@ -44,6 +44,8 @@ auto make_response(const http::request<Body, http::basic_fields<Allocator>>& req
 
 class SessionActor final : public td::actor::Actor {
 public:
+    constexpr static td::Slice actor_name = "SessionActor";
+
     explicit SessionActor(td::actor::ActorShared<> parent, tcp::socket&& socket)
         : parent_{std::move(parent)}
         , socket_{std::move(socket)}
@@ -146,24 +148,43 @@ private:
     beast::error_code ec_{};
 };
 
-Api::Api(td::actor::ActorShared<App> parent, td::int16 port)
+Api::Api(td::actor::ActorShared<App> parent, td::uint16 port)
     : parent_{std::move(parent)}
+    , ioc_{1}
+    , acceptor_{ioc_, {net::ip::make_address("0.0.0.0"), port}}
 {
-    const auto address = net::ip::make_address("127.0.0.1");
 }
 
 void Api::start_up()
 {
-    Actor::start_up();
+    td::actor::send_closure(actor_id(this), &Api::tick);
 }
 
 void Api::tear_down()
 {
-    Actor::tear_down();
+    stop();
+}
+
+void Api::hangup_shared()
+{
+    auto it = actors_.find(get_link_token());
+    if (it != actors_.end()) {
+        actors_.erase(it);
+    }
 }
 
 void Api::tick()
 {
+    LOG(WARNING) << "tick";
+
+    tcp::socket socket{ioc_};
+
+    acceptor_.accept(socket);
+
+    auto id = actor_id_++;
+    actors_[id] = td::actor::create_actor<SessionActor>(SessionActor::actor_name, actor_shared(this, id), std::move(socket));
+
+    td::actor::send_closure(actor_id(this), &Api::tick);
 }
 
 }  // namespace app

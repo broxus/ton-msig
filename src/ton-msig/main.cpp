@@ -37,6 +37,18 @@ auto create_handler(const td::actor::ActorId<App>& actor_id, std::function<void(
     });
 }
 
+template <typename T>
+void print_as_json(T&& value)
+{
+    std::cout << nlohmann::json(value).dump(4) << std::endl;
+}
+
+template <>
+void print_as_json<std::nullopt_t>(std::nullopt_t&& value)
+{
+    std::cout << "{}" << std::endl;
+}
+
 int main(int argc, char** argv)
 {
     td::actor::ActorOwn<App> app;
@@ -80,7 +92,7 @@ int main(int argc, char** argv)
                 name,
                 [&](const std::string& key_data) { key = check_result(load_key(key_data)); },
                 "Path to keypair file")
-            ->check(CLI::ExistingFile /* | MnemonicsValidator{} */) // mnemonics not supported now
+            ->check(CLI::ExistingFile)
             ->required();
     };
 
@@ -104,14 +116,24 @@ int main(int argc, char** argv)
         return subcommand->add_option("--timeout", msg_timeout, "Set message expiration timeout in seconds", true)->check(CLI::Range(10, 86400));
     };
 
+#ifdef MSIG_WITH_API
+    // Subcommand: serve
+
+    bool serve_api{false};
+
+    cmd.add_subcommand("serve", "Start as http server with api")->callback([&] { serve_api = true; });
+#endif
+
     // Subcommand: convert
     cmd.add_subcommand("convert", "Convert address into another formats")->needs(address_option)->callback([&] {
-        std::cout << "{\n"
-                  << R"(  "raw": ")" << address.workchain << ":" << address.addr.to_hex() << "\",\n"
-                  << R"(  "packed": ")" << (address.bounceable = false, address.rserialize()) << "\",\n"
-                  << R"(  "packed_urlsafe": ")" << address.rserialize(/*urlsafe*/ true) << "\",\n"
-                  << R"(  "packed_bounceable": ")" << (address.bounceable = true, address.rserialize()) << "\",\n"
-                  << R"(  "packed_bounceable_urlsafe: ")" << address.rserialize(/*urlsafe*/ true) << "\"\n}" << std::endl;
+        nlohmann::json j;
+        j["raw"] = std::to_string(address.workchain) + ":" + address.addr.to_hex();
+        j["packed"] = (address.bounceable = false, address.rserialize());
+        j["packedUrlSafe"] = address.rserialize(/*urlsafe*/ true);
+        j["packedBounceable"] = (address.bounceable = true, address.rserialize());
+        j["packedBounceableUrlSafe"] = address.rserialize(/*urlsafe*/ true);
+
+        std::cout << j.dump(4) << std::endl;
         std::exit(0);
     });
 
@@ -130,15 +152,16 @@ int main(int argc, char** argv)
     cmd_getpubkey->callback([&] {
         CHECK(key.has_value())
         const auto public_key = check_result(key->get_public_key());
-        std::cout << "{\n  \"public\": \"" << cppcodec::hex_lower::encode(public_key.as_octet_string()) << "\"\n}" << std::endl;
+        std::cout << nlohmann::json{{"public", cppcodec::hex_lower::encode(public_key.as_octet_string())}}.dump(4) << std::endl;
         std::exit(0);
     });
 
     // Subcommand: generate
 
-    auto* cmd_generate = cmd.add_subcommand("generate", "Generate new keypair");
-    bool gen_addr = false;
-    cmd_generate->add_flag("-a,--addr", gen_addr, "Whether to generate an address");
+    bool gen_addr = true;
+
+    auto* cmd_generate = cmd.add_subcommand("generate", "Generate new keypair and address");
+    cmd_generate->add_option("-a,--addr", gen_addr, "Whether to generate an address", true);
     add_workchain_option(cmd_generate);
     add_signature_option(cmd_generate, "-f,--from")->required(false);
     cmd_generate->callback([&] {
@@ -146,25 +169,27 @@ int main(int argc, char** argv)
         const auto private_key = from_existing ? std::move(key.value()) : ton::privkeys::Ed25519::random().export_key();
         const auto public_key = check_result(private_key.get_public_key());
 
-        std::cout << "{\n"
-                  << R"(  "public": ")" << cppcodec::hex_lower::encode(public_key.as_octet_string()) << "\",\n"
-                  << R"(  "secret": ")" << cppcodec::hex_lower::encode(private_key.as_octet_string()) << "\"";
+        nlohmann::json j{
+            {"public", cppcodec::hex_lower::encode(public_key.as_octet_string())},
+            {"secret", cppcodec::hex_lower::encode(private_key.as_octet_string())}};
         if (from_existing || gen_addr) {
             const auto addr = check_result(Contract::generate_addr(public_key));
-            std::cout << ",\n  \"address\": \"" << workchain << ":" << addr.to_hex() << "\"";
+            j["address"] = std::to_string(workchain) + ":" + addr.to_hex();
         }
-        std::cout << "\n}" << std::endl;
 
+        std::cout << j.dump(4) << std::endl;
         std::exit(0);
     });
 
     // Subcommand: deploy
 
+    std::vector<td::BigInt256> owners{};
+    td::uint8 req_confirms{1};
+
     auto* cmd_deploy = cmd.add_subcommand("deploy", "Deploy new contract")->excludes(address_option);
     add_signature_option(cmd_deploy);
     add_workchain_option(cmd_deploy);
     // add_force_local_option(cmd_deploy); // will not work now
-    std::vector<td::BigInt256> owners{};
     cmd_deploy
         ->add_option_function<std::vector<std::string>>(
             "-o,--owner",
@@ -179,7 +204,6 @@ int main(int argc, char** argv)
         ->transform(KeyValidator{})
         ->expected(-1)
         ->required();
-    td::uint8 req_confirms{1};
     cmd_deploy->add_option("-r,--req-confirms", req_confirms, "Number of confirmations required for executing transaction", true)
         ->default_val(static_cast<td::uint16>(req_confirms))
         ->check(CLI::Range(1, 32));
@@ -217,22 +241,17 @@ int main(int argc, char** argv)
     cmd.add_subcommand("info", "Get account info")->needs(address_option)->callback([&] {
         action_get_account_info = [&](const td::actor::ActorId<App>& actor_id) {
             using Result = Wallet::BriefAccountInfo;
-            return create_handler<Result>(actor_id, [&](Result&& info) {
-                std::cout << "{\n"
-                          << R"(  "state": ")" << to_string(info.status) << "\",\n"
-                          << R"(  "balance": ")" << (info.balance.not_null() ? info.balance->to_dec_string() : "0") << "\",\n"
-                          << R"(  "last_transaction_lt": )" << info.last_transaction_lt << ",\n"
-                          << R"(  "last_transaction_hash": ")" << info.last_transaction_hash.to_hex() << "\",\n"
-                          << R"(  "sync_utime": )" << info.sync_time << "\n}" << std::endl;
-            });
+            return create_handler<Result>(actor_id, &print_as_json<Result>);
         };
     });
 
     // Subcommand: find
 
+    MessageInfo message_info;
+    bool dont_wait_until_appears = false;
+
     auto* cmd_find = cmd.add_subcommand("find", "Find entity by id")->require_subcommand()->needs(address_option);
     auto* cmd_find_message = cmd_find->add_subcommand("message", "Find message by hash");
-    MessageInfo message_info;
     cmd_find_message
         ->add_option_function<std::string>(
             "hash",
@@ -240,19 +259,12 @@ int main(int argc, char** argv)
             "Message hash or path to message info")
         ->check(CLI::ExistingFile /* | HexValidator{} */)  // raw hash not supported yet
         ->required();
-    bool dont_wait_until_appears = false;
     cmd_find_message->add_flag("--no-wait", dont_wait_until_appears, "Don't wait for the message you are looking for");
     cmd_find_message->callback([&] {
         action_find_message = [&](const td::actor::ActorId<App>& actor_id) {
             using Result = Wallet::BriefMessageInfo;
             return Wallet::FindMessage{
-                create_handler<Result>(
-                    actor_id,
-                    [&](Result&& result) {
-                        std::cout << "{\n"
-                                  << R"(  "found": )" << (result.found ? "true" : "false") << ",\n"
-                                  << R"(  "gen_utime": )" << result.gen_utime << "\n}" << std::endl;
-                    }),
+                create_handler<Result>(actor_id, &print_as_json<Result>),
                 message_info.hash,
                 message_info.created_at,
                 message_info.expires_at,
@@ -262,8 +274,13 @@ int main(int argc, char** argv)
 
     // Subcommand: submitTransaction
 
-    auto* cmd_submit_transaction = cmd.add_subcommand("submitTransaction", "Create new transaction")->needs(address_option);
     block::StdAddress dest{};
+    td::BigInt256 value{};
+    bool all_balance = false;
+    bool bounce = true;
+    td::Ref<vm::Cell> payload{vm::CellBuilder{}.finalize()};
+
+    auto* cmd_submit_transaction = cmd.add_subcommand("submitTransaction", "Create new transaction")->needs(address_option);
     cmd_submit_transaction
         ->add_option_function<std::string>(
             "dest",
@@ -271,7 +288,6 @@ int main(int argc, char** argv)
             "Destination address")
         ->required()
         ->check(AddressValidator{});
-    td::BigInt256 value{};
     cmd_submit_transaction
         ->add_option_function<std::string>(
             "value",
@@ -279,11 +295,8 @@ int main(int argc, char** argv)
             "Message value in TON")
         ->required()
         ->transform(TonValidator{});
-    bool all_balance = false;
     cmd_submit_transaction->add_option("--all-balance", all_balance, "Send all balance and delete contract", true);
-    bool bounce = true;
     cmd_submit_transaction->add_option("--bounce", bounce, "Return message back when it is send to uninitialized address", true);
-    td::Ref<vm::Cell> payload{vm::CellBuilder{}.finalize()};
     cmd_submit_transaction->add_option_function<std::string>(
         "--payload",
         [&](const std::string& str) {
@@ -307,10 +320,9 @@ int main(int argc, char** argv)
             LOG(DEBUG) << "Sending " << value.to_dec_string() << " TON from " << address.workchain << ":" << address.addr.to_hex() << " to " << dest.workchain
                        << ":" << dest.addr.to_hex();
 
-            return std::make_unique<msig::SubmitTransaction>(
-                create_handler<td::uint64>(
-                    actor_id,
-                    [&](td::uint64 transaction_id) { std::cout << "{\n  \"transactionId\": " << transaction_id << "\n}" << std::endl; }),
+            using Request = msig::SubmitTransaction;
+            return std::make_unique<Request>(
+                create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>),
                 force_local,
                 now,
                 expire,
@@ -326,8 +338,9 @@ int main(int argc, char** argv)
 
     // Subcommand: confirmTransaction
 
-    auto* cmd_confirm_transaction = cmd.add_subcommand("confirmTransaction", "Confirm pending transaction")->needs(address_option);
     td::uint64 transaction_id{};
+
+    auto* cmd_confirm_transaction = cmd.add_subcommand("confirmTransaction", "Confirm pending transaction")->needs(address_option);
     cmd_confirm_transaction->add_option("transactionId", transaction_id, "Transaction id")->required();
     add_signature_option(cmd_confirm_transaction);
     add_force_local_option(cmd_confirm_transaction);
@@ -341,8 +354,9 @@ int main(int argc, char** argv)
 
             LOG(DEBUG) << "Confirming " << transaction_id << " for " << address.workchain << ":" << address.addr.to_hex();
 
-            return std::make_unique<msig::ConfirmTransaction>(
-                create_handler<std::nullopt_t>(actor_id, [&](std::nullopt_t) { std::cout << "{}" << std::endl; }),
+            using Request = msig::ConfirmTransaction;
+            return std::make_unique<Request>(
+                create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>),
                 force_local,
                 now,
                 expire,
@@ -354,19 +368,16 @@ int main(int argc, char** argv)
 
     // Subcommand: isConfirmed
 
-    auto* cmd_is_confirmed = cmd.add_subcommand("isConfirmed", "Check if transactions are confirmed")->needs(address_option);
     td::uint32 mask{};
-    cmd_is_confirmed->add_option("mask", mask, "Mask")->required()->check(CLI::PositiveNumber);
     td::uint8 index{};
+
+    auto* cmd_is_confirmed = cmd.add_subcommand("isConfirmed", "Check if transactions are confirmed")->needs(address_option);
+    cmd_is_confirmed->add_option("mask", mask, "Mask")->required()->check(CLI::PositiveNumber);
     cmd_is_confirmed->add_option("index", index, "Index")->required()->check(CLI::PositiveNumber);
     cmd_is_confirmed->callback([&] {
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
-            return std::make_unique<msig::IsConfirmed>(
-                create_handler<bool>(
-                    actor_id,
-                    [&](bool confirmed) { std::cout << "{\n  \"confirmed\": " << (confirmed ? "true" : "false") << "\n}" << std::endl; }),
-                mask,
-                index);
+            using Request = msig::IsConfirmed;
+            return std::make_unique<Request>(create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>), mask, index);
         };
     });
 
@@ -374,49 +385,19 @@ int main(int argc, char** argv)
 
     cmd.add_subcommand("getParameters", "Get msig parameters")->needs(address_option)->callback([&] {
         action_make_request = [](const td::actor::ActorId<App>& actor_id) {
-            return std::make_unique<msig::GetParameters>(create_handler<msig::Parameters>(actor_id, [&](msig::Parameters&& param) {
-                std::cout << "{\n"                                                                                                //
-                          << R"(  "max_queued_transactions": )" << static_cast<uint32_t>(param.max_queued_transactions) << ",\n"  //
-                          << R"(  "max_custodian_count": )" << static_cast<uint32_t>(param.max_custodian_count) << ",\n"          //
-                          << R"(  "expiration_time": )" << param.expiration_time << ",\n"                                         //
-                          << R"(  "min_value": ")" << param.min_value << "\",\n"                                                  //
-                          << R"(  "required_txn_confirms": )" << static_cast<uint32_t>(param.required_txn_confirms) << "\n}"      //
-                          << std::endl;
-            }));
+            using Request = msig::GetParameters;
+            return std::make_unique<Request>(create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>));
         };
     });
 
     // Subcommand: getTransaction
 
-    auto print_transaction = [](const msig::Transaction& trans, size_t offset) {
-        const std::string tab(offset, ' ');
-        std::cout << tab << "{\n"
-                  << tab << R"(  "id": )" << trans.id << ",\n"
-                  << tab << R"(  "confirmationMask": )" << trans.confirmationMask << ",\n"
-                  << tab << R"(  "signsRequired": )" << static_cast<uint32_t>(trans.signsRequired) << ",\n"
-                  << tab << R"(  "signsReceived": )" << static_cast<uint32_t>(trans.signsReceived) << ",\n"
-                  << tab << R"(  "creator": ")" << trans.creator.to_hex_string() << "\",\n"
-                  << tab << R"(  "index": )" << static_cast<uint32_t>(trans.index) << ",\n"
-                  << tab << R"(  "dest": ")" << trans.dest.workchain << ":" << trans.dest.addr.to_hex() << "\",\n"
-                  << tab << R"(  "value": ")" << trans.value.to_dec_string() << "\",\n"
-                  << tab << R"(  "send_flags": )" << trans.send_flags << ",\n"
-                  << tab << R"(  "bounce": )" << (trans.bounce ? "true" : "false") << "\n"
-                  << tab << "}";
-    };
-
     auto* cmd_get_transaction = cmd.add_subcommand("getTransaction", "Get transaction info")->needs(address_option);
     cmd_get_transaction->add_option("transactionId", transaction_id, "Transaction id")->required()->check(CLI::PositiveNumber);
     cmd_get_transaction->callback([&] {
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
-            using Result = msig::GetTransaction::Result;
-            return std::make_unique<msig::GetTransaction>(
-                create_handler<Result>(
-                    actor_id,
-                    [&](Result&& transaction) {
-                        print_transaction(transaction, 0);
-                        std::cout << std::endl;
-                    }),
-                transaction_id);
+            using Request = msig::GetTransaction;
+            return std::make_unique<Request>(create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>), transaction_id);
         };
     });
 
@@ -424,22 +405,8 @@ int main(int argc, char** argv)
 
     cmd.add_subcommand("getTransactions", "Get pending transactions")->needs(address_option)->callback([&] {
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
-            using Result = msig::GetTransactions::Result;
-            return std::make_unique<msig::GetTransactions>(create_handler<Result>(actor_id, [&](Result&& transactions) {
-                if (transactions.empty()) {
-                    std::cout << "[]" << std::endl;
-                    return;
-                }
-                std::cout << "[\n";
-                for (size_t i = 0; i < transactions.size(); ++i) {
-                    print_transaction(transactions[i], 2);
-                    if (i + 1 < transactions.size()) {
-                        std::cout << ",";
-                    }
-                    std::cout << "\n";
-                }
-                std::cout << "]" << std::endl;
-            }));
+            using Request = msig::GetTransactions;
+            return std::make_unique<Request>(create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>));
         };
     });
 
@@ -447,22 +414,8 @@ int main(int argc, char** argv)
 
     cmd.add_subcommand("getTransactionIds", "Get ids of pending transactions")->needs(address_option)->callback([&] {
         action_make_request = [](const td::actor::ActorId<App>& actor_id) {
-            using Result = msig::GetTransactionIds::Result;
-            return std::make_unique<msig::GetTransactionIds>(create_handler<Result>(actor_id, [&](Result&& ids) {
-                if (ids.empty()) {
-                    std::cout << "[]" << std::endl;
-                    return;
-                }
-                std::cout << "[\n";
-                for (size_t i = 0; i < ids.size(); ++i) {
-                    std::cout << "  " << ids[i];
-                    if (i + 1 < ids.size()) {
-                        std::cout << ",";
-                    }
-                    std::cout << "\n";
-                }
-                std::cout << "]" << std::endl;
-            }));
+            using Request = msig::GetTransactionIds;
+            return std::make_unique<Request>(create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>));
         };
     });
 
@@ -470,23 +423,8 @@ int main(int argc, char** argv)
 
     cmd.add_subcommand("getCustodians", "Get owners of this wallet")->needs(address_option)->callback([&] {
         action_make_request = [](const td::actor::ActorId<App>& actor_id) {
-            using Result = msig::GetCustodians::Result;
-            return std::make_unique<msig::GetCustodians>(create_handler<Result>(actor_id, [&](Result&& custodians) {
-                if (custodians.empty()) {
-                    std::cout << "[]" << std::endl;
-                }
-                std::cout << "[\n";
-                for (size_t i = 0; i < custodians.size(); ++i) {
-                    std::cout << "  {\n"                                                                      //
-                              << R"(    "index": )" << static_cast<td::uint32>(custodians[i].index) << ",\n"  //
-                              << R"(    "pubkey": ")" << custodians[i].pubkey.to_hex_string() << "\"\n  }";   //
-                    if (i + 1 < custodians.size()) {
-                        std::cout << ",";
-                    }
-                    std::cout << "\n";
-                }
-                std::cout << "]" << std::endl;
-            }));
+            using Request = msig::GetCustodians;
+            return std::make_unique<Request>(create_handler<Request::Result>(actor_id, &print_as_json<Request::Result>));
         };
     });
 
@@ -504,12 +442,17 @@ int main(int argc, char** argv)
         if (action_make_request) {
             td::actor::send_closure(app, &App::make_request, address, action_make_request(app.get()));
         }
-        if (action_get_account_info) {
+        else if (action_get_account_info) {
             td::actor::send_closure(app, &App::get_account_info, address, action_get_account_info(app.get()));
         }
-        if (action_find_message) {
+        else if (action_find_message) {
             td::actor::send_closure(app, &App::find_message, address, action_find_message(app.get()));
         }
+#ifdef MSIG_WITH_API
+        else if (serve_api) {
+            td::actor::send_closure(app, &App::serve_api);
+        }
+#endif
         app.release();
     });
     scheduler.run();

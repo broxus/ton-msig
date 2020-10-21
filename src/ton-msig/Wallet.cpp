@@ -423,4 +423,21 @@ void Wallet::finish(td::Status status)
     stop();
 }
 
+void to_json(nlohmann::json& j, const Wallet::BriefAccountInfo& v)
+{
+    j = nlohmann::json{
+        {"state", to_string(v.status)},
+        {"balance", v.balance.not_null() ? v.balance->to_dec_string() : "0"},
+        {"lastTransactionLt", v.last_transaction_lt},
+        {"lastTransactionHash", v.last_transaction_hash.to_hex()},
+        {"syncTime", v.sync_time}};
+}
+
+void to_json(nlohmann::json& j, const Wallet::BriefMessageInfo& v)
+{
+    j = nlohmann::json{
+        {"found", v.found},  //
+        {"syncTime", v.gen_utime}};
+}
+
 }  // namespace app

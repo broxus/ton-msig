@@ -115,4 +115,7 @@ private:
     MessageFoundHandler message_found_handler_{};
 };
 
+void to_json(nlohmann::json& j, const Wallet::BriefAccountInfo& v);
+void to_json(nlohmann::json& j, const Wallet::BriefMessageInfo& v);
+
 }  // namespace app

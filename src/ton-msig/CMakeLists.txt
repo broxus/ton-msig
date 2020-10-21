@@ -85,7 +85,8 @@ target_include_directories(
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
 
 target_link_libraries(${SUBPROJ_NAME} PRIVATE
-        tonlib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope ftabi CLI11)
+        tonlib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope ftabi
+        CLI11 nlohmann_json::nlohmann_json)
 
 if (MSIG_WITH_API)
     target_include_directories(${SUBPROJ_NAME} PRIVATE

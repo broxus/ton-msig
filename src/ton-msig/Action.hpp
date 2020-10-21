@@ -3,6 +3,7 @@
 #include <tonlib/Stuff.h>
 
 #include <ftabi/Abi.hpp>
+#include <nlohmann/json.hpp>
 
 namespace app
 {
@@ -56,6 +57,8 @@ struct Parameters {
     td::uint8 required_txn_confirms{};
 };
 
+void to_json(nlohmann::json& j, const Parameters& v);
+
 struct Transaction {
     td::uint64 id{};
     td::uint32 confirmationMask{};
@@ -65,14 +68,30 @@ struct Transaction {
     td::uint8 index{};
     block::StdAddress dest{};
     td::BigInt256 value{};
-    td::uint16 send_flags{};
+    td::uint16 sendFlags{};
     bool bounce{};
 };
+
+void to_json(nlohmann::json& j, const Transaction& v);
 
 struct Custodian {
     td::uint8 index{};
     td::BigInt256 pubkey{};
 };
+
+void to_json(nlohmann::json& j, const Custodian& v);
+
+struct TransactionSent {
+    td::uint64 transactionId{};
+};
+
+void to_json(nlohmann::json& j, const TransactionSent& v);
+
+struct Confirmation {
+    bool confirmed{};
+};
+
+void to_json(nlohmann::json& j, const Confirmation& v);
 
 struct Constructor final : Action<std::nullopt_t> {
     explicit Constructor(
@@ -103,7 +122,7 @@ struct Constructor final : Action<std::nullopt_t> {
     std::optional<std::string> msg_info_path_;
 };
 
-struct SubmitTransaction final : Action<td::uint64> {
+struct SubmitTransaction final : Action<TransactionSent> {
     explicit SubmitTransaction(
         Handler&& promise,
         bool force_local,
@@ -165,7 +184,7 @@ struct ConfirmTransaction final : Action<std::nullopt_t> {
     std::optional<std::string> msg_info_path_;
 };
 
-struct IsConfirmed final : Action<bool> {
+struct IsConfirmed final : Action<Confirmation> {
     explicit IsConfirmed(Handler&& promise, td::uint32 mask, td::uint8 index);
 
     static auto output_type() -> ftabi::ParamRef;
