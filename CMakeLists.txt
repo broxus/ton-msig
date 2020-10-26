@@ -22,6 +22,7 @@ set(_PROJECT_VERSION
 project(${_PROJECT_NAME} LANGUAGES ${_PROJECT_LANGUAGE} VERSION ${_PROJECT_VERSION})
 
 option(MSIG_WITH_API "Use \"ON\" to build with integrated server." OFF)
+option(BUILD_DEB_PACKAGE "Use \"ON\" to build with cpack." OFF)
 
 # Extlibs
 set(WITH_GFLAGS OFF)
