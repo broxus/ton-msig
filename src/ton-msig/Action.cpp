@@ -16,7 +16,7 @@ namespace
 {
 auto make_header_params() -> HeaderParams
 {
-    return make_params(ParamPublicKey{}, ParamTime{}, ParamExpire{});
+    return ftabi::make_named_params(std::make_pair("pubkey", ParamPublicKey{}), std::make_pair("time", ParamTime{}), std::make_pair("expire", ParamExpire{}));
 }
 
 auto empty_function_call() -> FunctionCallRef
@@ -53,18 +53,17 @@ auto check_output(const std::vector<ftabi::ValueRef>& output) -> td::Status
 auto transaction_param() -> ParamTuple
 {
     return ParamTuple{
-        "transaction",
-        ParamUint{"id", 64},
-        ParamUint{"confirmationsMask", 32},
-        ParamUint{"signsRequired", 8},
-        ParamUint{"signsReceived", 8},
-        ParamUint{"creator", 256},
-        ParamUint{"index", 8},
-        ParamAddress{"dest"},
-        ParamUint{"value", 128},
-        ParamUint{"sendFlags", 16},
-        ParamCell{"payload"},
-        ParamBool{"bounce"},
+        ParamUint{64},   // id
+        ParamUint{32},   // confirmationsMask
+        ParamUint{8},    // signsRequired
+        ParamUint{8},    // signsReceived
+        ParamUint{256},  // creator
+        ParamUint{8},    // index
+        ParamAddress{},  // dest
+        ParamUint{128},  // value
+        ParamUint{16},   // sendFlags
+        ParamCell{},     // payload
+        ParamBool{},     // bounce
     };
 }
 
@@ -190,7 +189,7 @@ Constructor::Constructor(
 
 auto Constructor::create_message() -> td::Result<EncodedMessage>
 {
-    static auto input_params = make_params(ParamArray{"owners", ParamUint{"owner", 256}}, ParamUint{"reqConfirms", 8});
+    static auto input_params = make_params(ParamArray{ParamUint{256}}, ParamUint{8});
     static auto function = td::Ref{Function{"constructor", make_header_params(), move_copy(input_params), {output_type()}}};
 
     TRY_RESULT(public_key, private_key_.get_public_key())
@@ -198,11 +197,13 @@ auto Constructor::create_message() -> td::Result<EncodedMessage>
     std::vector<ValueRef> owners;
     owners.reserve(owners_.size());
     for (const auto& owner : owners_) {
-        owners.emplace_back(make_value(ParamUint{"owner", 256}, owner));
+        owners.emplace_back(make_value(ParamUint{256}, owner));
     }
 
-    HeaderValues header_values =
-        make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()), make_value(ParamTime{}, time_), make_value(ParamExpire{}, expire_));
+    HeaderValues header_values = make_header(
+        std::make_pair("pubkey", make_value(ParamPublicKey{}, public_key.as_octet_string())),
+        std::make_pair("time", make_value(ParamTime{}, time_)),
+        std::make_pair("expire", make_value(ParamExpire{}, expire_)));
     InputValues input_values{
         make_value<ValueArray>(input_params[0], std::move(owners)),  //
         make_value<ValueInt>(input_params[1], td::make_bigint(req_confirms_))};
@@ -257,19 +258,21 @@ SubmitTransaction::SubmitTransaction(
 
 auto SubmitTransaction::output_type() -> ftabi::ParamRef
 {
-    static ParamRef param{ParamUint{"transId", 64}};
+    static ParamRef param{ParamUint{64}};
     return param;
 }
 
 auto SubmitTransaction::create_message() -> td::Result<EncodedMessage>
 {
-    static auto input_params = make_params(ParamAddress{"dest"}, ParamUint{"value", 128}, ParamBool{"bounce"}, ParamBool{"allBalance"}, ParamCell{"payload"});
+    static auto input_params = make_params(ParamAddress{}, ParamUint{128}, ParamBool{}, ParamBool{}, ParamCell{});
     static auto function = td::Ref{Function{"submitTransaction", make_header_params(), move_copy(input_params), {output_type()}}};
 
     TRY_RESULT(public_key, private_key_.get_public_key())
 
-    HeaderValues header_values =
-        make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()), make_value(ParamTime{}, time_), make_value(ParamExpire{}, expire_));
+    HeaderValues header_values = make_header(
+        std::make_pair("pubkey", make_value(ParamPublicKey{}, public_key.as_octet_string())),
+        std::make_pair("time", make_value(ParamTime{}, time_)),
+        std::make_pair("expire", make_value(ParamExpire{}, expire_)));
     InputValues input_values{
         make_value<ValueAddress>(input_params[0], dest_),
         make_value<ValueInt>(input_params[1], value_),
@@ -317,13 +320,15 @@ ConfirmTransaction::ConfirmTransaction(
 
 auto ConfirmTransaction::create_message() -> td::Result<EncodedMessage>
 {
-    static ParamRef input_param{ParamUint{"transactionId", 64}};
+    static ParamRef input_param{ParamUint{64}};
     static auto function = td::Ref{Function{"confirmTransaction", make_header_params(), {input_param}, {output_type()}}};
 
     TRY_RESULT(public_key, private_key_.get_public_key())
 
-    HeaderValues header_values =
-        make_header(make_value(ParamPublicKey{}, public_key.as_octet_string()), make_value(ParamTime{}, time_), make_value(ParamExpire{}, expire_));
+    HeaderValues header_values = make_header(
+        std::make_pair("pubkey", make_value(ParamPublicKey{}, public_key.as_octet_string())),
+        std::make_pair("time", make_value(ParamTime{}, time_)),
+        std::make_pair("expire", make_value(ParamExpire{}, expire_)));
     InputValues input_values{make_value<ValueInt>(input_param, td::make_bigint(transaction_id_))};
 
     FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
@@ -355,13 +360,13 @@ IsConfirmed::IsConfirmed(Action::Handler&& promise, td::uint32 mask, td::uint8 i
 
 auto IsConfirmed::output_type() -> ftabi::ParamRef
 {
-    static ParamRef param{ParamBool{"confirmed"}};
+    static ParamRef param{ParamBool{}};
     return param;
 }
 
 auto IsConfirmed::create_message() -> td::Result<EncodedMessage>
 {
-    static auto input_params = make_params(ParamUint{"mask", 32}, ParamUint{"index", 8});
+    static auto input_params = make_params(ParamUint{32}, ParamUint{8});
     static auto function = td::Ref{Function{"isConfirmed", make_header_params(), move_copy(input_params), {output_type()}}};
 
     FunctionCallRef call{FunctionCall{
@@ -389,11 +394,12 @@ GetParameters::GetParameters(Action::Handler&& promise)
 auto GetParameters::output_type() -> std::vector<ftabi::ParamRef>
 {
     static std::vector<ParamRef> params = make_params(
-        ParamUint{"maxQueuedTransactions", 8},
-        ParamUint{"maxCustodianCount", 8},
-        ParamUint{"expirationTime", 64},
-        ParamUint{"minValue", 128},
-        ParamUint{"requiredTxnConfirms", 8});
+        ParamUint{8},    // maxQueuedTransactions
+        ParamUint{8},    // maxCustodianCount
+        ParamUint{64},   // expirationTime
+        ParamUint{128},  // minValue
+        ParamUint{8}     // requiredTxnConfirms
+    );
     return params;
 }
 
@@ -427,9 +433,9 @@ auto GetTransaction::output_type() -> ftabi::ParamRef
 
 auto GetTransaction::create_message() -> td::Result<EncodedMessage>
 {
-    static auto function = td::Ref{Function{"getTransaction", make_header_params(), make_params(ParamUint{"id", 64}), {output_type()}}};
+    static auto function = td::Ref{Function{"getTransaction", make_header_params(), make_params(ParamUint{64}), {output_type()}}};
 
-    auto call = FunctionCallRef{FunctionCall{{make_value(ParamUint{"id", 64}, td::make_bigint(transaction_id_))}}};
+    auto call = FunctionCallRef{FunctionCall{{make_value(ParamUint{64}, td::make_bigint(transaction_id_))}}};
 
     TRY_RESULT(body, function->encode_input(call))
     return std::make_tuple(function, td::Ref<vm::Cell>{}, std::move(body));
@@ -451,7 +457,7 @@ GetTransactions::GetTransactions(Action::Handler&& promise)
 
 auto GetTransactions::output_type() -> ftabi::ParamRef
 {
-    static ParamRef param{ParamArray{"transactions", transaction_param()}};
+    static ParamRef param{ParamArray{transaction_param()}};
     return param;
 }
 
@@ -486,7 +492,7 @@ GetTransactionIds::GetTransactionIds(Action::Handler&& promise)
 
 auto GetTransactionIds::output_type() -> ftabi::ParamRef
 {
-    static ParamRef param{ParamArray{"ids", ParamUint{"id", 64}}};
+    static ParamRef param{ParamArray{ParamUint{64}}};
     return param;
 }
 
@@ -522,11 +528,10 @@ GetCustodians::GetCustodians(Action::Handler&& promise)
 auto GetCustodians::output_type() -> ftabi::ParamRef
 {
     static ParamRef param{ParamArray{
-        "custodians",
         ParamTuple{
-            "custodian",            //
-            ParamUint{"index", 8},  //
-            ParamUint{"pubkey", 256}}}};
+            ParamUint{8},    // index
+            ParamUint{256}}  // pubkey
+    }};
     return param;
 }
 

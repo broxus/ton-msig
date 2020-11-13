@@ -2,6 +2,8 @@
 
 #include <res/safe_multisig_wallet_tvc.h>
 
+#include <ftabi/ftabi/utils.hpp>
+
 namespace app
 {
 namespace
@@ -31,36 +33,7 @@ auto Contract::generate_addr(const td::Ed25519::PublicKey& public_key) -> td::Re
 
 auto Contract::generate_state_init(const td::Ed25519::PublicKey& public_key) -> td::Result<td::Ref<vm::Cell>>
 {
-    block::gen::StateInit::Record state_init;
-    if (!tlb::unpack_cell(safe_multisig_wallet_tvc(), state_init)) {
-        return td::Status::Error("Failed to unpack state_init");
-    }
-
-    vm::CellBuilder value_cb{};
-    if (!value_cb.store_bytes_bool(public_key.as_octet_string())) {
-        return td::Status::Error("Failed to create public key value");
-    }
-
-    try {
-        auto data = vm::load_cell_slice_ref(state_init.data->prefetch_ref());
-        vm::Dictionary map{data, 64};
-        td::BitArray<64> key{};
-        map.set(key, value_cb.as_cellslice_ref(), vm::Dictionary::SetMode::Replace);
-
-        value_cb.reset();
-        auto packed_map = value_cb.store_ones(1).store_ref(map.get_root_cell()).finalize();
-        state_init.data = value_cb.store_ones(1).store_ref(packed_map).as_cellslice_ref();
-    }
-    catch (const vm::VmError& e) {
-        return td::Status::Error(PSLICE() << "VM error: " << e.as_status().message());
-    }
-
-    td::Ref<vm::Cell> new_state;
-    if (!tlb::pack_cell(new_state, state_init)) {
-        return td::Status::Error("Failed to pack state_init");
-    }
-
-    return new_state;
+    return ftabi::generate_state_init(safe_multisig_wallet_tvc(), public_key);
 }
 
 }  // namespace app

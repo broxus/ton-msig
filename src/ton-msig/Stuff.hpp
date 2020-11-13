@@ -50,4 +50,10 @@ inline auto now_ms() -> td::uint64
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
+template <typename T, size_t N>
+static auto load_slice(T (&data)[N]) -> td::Slice
+{
+    return td::Slice{reinterpret_cast<const char*>(data), N * sizeof(T)};
+}
+
 }  // namespace app
