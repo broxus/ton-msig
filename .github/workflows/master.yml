@@ -34,3 +34,9 @@ jobs:
         working-directory: ./build
         run: |
           cmake --build . --target ton-msig -- -j2
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: ton-msig
+          path: build/bin/ton-msig
