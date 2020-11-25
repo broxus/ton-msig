@@ -5,7 +5,7 @@ set(_PROJECT_LANGUAGE CXX)
 
 set(_PROJECT_MAJOR_VERSION 1)
 set(_PROJECT_MINOR_VERSION 0)
-set(_PROJECT_PATCH_VERSION 0)
+set(_PROJECT_PATCH_VERSION 1)
 
 set(SUBPROJECT_LIST
         "src/ton-msig"
@@ -21,7 +21,6 @@ set(_PROJECT_VERSION
 
 project(${_PROJECT_NAME} LANGUAGES ${_PROJECT_LANGUAGE} VERSION ${_PROJECT_VERSION})
 
-option(MSIG_WITH_API "Use \"ON\" to build with integrated server." OFF)
 option(BUILD_DEB_PACKAGE "Use \"ON\" to build with cpack." OFF)
 
 # Extlibs

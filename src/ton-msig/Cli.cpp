@@ -3,9 +3,10 @@
 #include <td/utils/JsonBuilder.h>
 #include <td/utils/misc.h>
 #include <tdutils/td/utils/filesystem.h>
-#include <tonlib/keys/Mnemonic.h>
 
 #include <keys/keys.hpp>
+
+#include "Mnemonic.hpp"
 
 namespace app
 {
@@ -19,11 +20,11 @@ auto without_prefix(const std::string& str) -> td::Slice
 
 }  // namespace
 
-MnemonicsValidator::MnemonicsValidator()
+MnemonicValidator::MnemonicValidator()
     : CLI::Validator(type_name)
 {
     func_ = [](const std::string& str) {
-        if (!is_mnemonics(str)) {
+        if (!is_mnemonic(str)) {
             return "Invalid signature words: " + str;
         }
         return std::string{};
@@ -131,7 +132,7 @@ HexValidator::HexValidator(size_t length)
     };
 }
 
-auto is_mnemonics(const std::string& str) -> bool
+auto is_mnemonic(const std::string& str) -> bool
 {
     size_t word_count = 1;
     for (size_t i = 0; i < str.size(); ++i) {
@@ -191,9 +192,8 @@ auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>
 
         return ton::privkeys::Ed25519{private_key_data.as_slice()}.export_key();
     }
-    else if (is_mnemonics(str)) {
-        TRY_RESULT(mnemonic, tonlib::Mnemonic::create(td::SecureString{str}, {}))
-        return mnemonic.to_private_key();
+    else if (is_mnemonic(str)) {
+        return recover_key(str);
     }
     else {
         return file_r.move_as_error();

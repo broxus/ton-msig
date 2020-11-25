@@ -23,9 +23,6 @@ public:
     void make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action);
     void get_account_info(const block::StdAddress& addr, td::Promise<Wallet::BriefAccountInfo>&& promise);
     void find_message(const block::StdAddress& addr, Wallet::FindMessage&& action);
-#ifdef MSIG_WITH_API
-    void serve_api();
-#endif
 
     void close();
 

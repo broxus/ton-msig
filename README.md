@@ -14,7 +14,7 @@
 ### Usage
 ```
 ton-msig
-Usage: ./ton-msig [OPTIONS] [addr] SUBCOMMAND
+Usage: ./ton-msigd [OPTIONS] [addr] SUBCOMMAND
 
 Positionals:
   addr ADDRESS:ADDRESS                      Wallet contract address
@@ -37,16 +37,17 @@ getpubkey
     privkey TEXT:KEY REQUIRED                 Private key hex
 
 generate
-  Generate new keypair
+  Generate new keypair and address
   Options:
-    -a,--addr                                 Whether to generate an address
+    -a,--addr BOOLEAN=1                       Whether to generate an address
     -w,--workchain INT:INT in [-1 - 0]        Workchain
-    -f,--from TEXT:FILE                       Path to keypair file
+    -f,--from TEXT:(FILE) OR (MNEMONIC)      Path to keypair file
 
 deploy
   Deploy new contract
   Options:
-    -s,--sign TEXT:FILE REQUIRED              Path to keypair file
+    -s,--sign TEXT:(FILE) OR (MNEMONIC) REQUIRED
+                                              Path to keypair file
     -w,--workchain INT:INT in [-1 - 0]        Workchain
     -o,--owner TEXT:KEY ... REQUIRED          Custodian public key
     -r,--req-confirms UINT:INT in [1 - 32]=1  Number of confirmations required for executing transaction
@@ -70,7 +71,8 @@ submitTransaction
     --all-balance BOOLEAN=0                   Send all balance and delete contract
     --bounce BOOLEAN=1                        Return message back when it is send to uninitialized address
     --payload TEXT                            Serialized bag of cells of message body
-    -s,--sign TEXT:FILE REQUIRED              Path to keypair file
+    -s,--sign TEXT:(FILE) OR (MNEMONIC) REQUIRED
+                                              Path to keypair file
     --local                                   Force local execution
     --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
     --save TEXT                               Save message info to file
@@ -80,7 +82,8 @@ confirmTransaction
   Positionals:
     transactionId UINT REQUIRED               Transaction id
   Options:
-    -s,--sign TEXT:FILE REQUIRED              Path to keypair file
+    -s,--sign TEXT:(FILE) OR (MNEMONIC) REQUIRED
+                                              Path to keypair file
     --local                                   Force local execution
     --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
     --save TEXT                               Save message info to file
@@ -127,7 +130,6 @@ cmake .. \
     -DBUILD_TESTING=OFF \
     -DTON_USE_ROCKSDB=OFF \
     -DTON_USE_ABSEIL=OFF \
-    -DMSIG_WITH_API=OFF \
     -DTON_USE_GDB=OFF \
     -DTON_USE_STACKTRACE=OFF
 

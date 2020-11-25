@@ -4,10 +4,6 @@
 #include <tonlib/LastBlock.h>
 #include <tonlib/LastConfig.h>
 
-#ifdef MSIG_WITH_API
-#include "Api.hpp"
-#endif
-
 namespace app
 {
 auto App::create(Options&& options) -> td::actor::ActorOwn<App>
@@ -37,14 +33,6 @@ void App::find_message(const block::StdAddress& addr, Wallet::FindMessage&& acti
     auto id = actor_id_++;
     actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(action));
 }
-
-#ifdef MSIG_WITH_API
-void App::serve_api()
-{
-    auto id = actor_id_++;
-    actors_[id] = td::actor::create_actor<Api>(Api::actor_name, actor_shared(this, id), 8081);
-}
-#endif
 
 void App::start_up()
 {

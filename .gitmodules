@@ -7,12 +7,6 @@
 [submodule "extlibs/cppcodec"]
 	path = extlibs/cppcodec
 	url = https://github.com/tplgy/cppcodec.git
-[submodule "extlibs/beast"]
-	path = extlibs/beast
-	url = https://github.com/boostorg/beast.git
-[submodule "extlibs/asio"]
-	path = extlibs/asio
-	url = https://github.com/boostorg/asio.git
 [submodule "extlibs/json"]
 	path = extlibs/json
 	url = https://github.com/nlohmann/json.git

@@ -8,9 +8,9 @@
 
 namespace app
 {
-struct MnemonicsValidator : public CLI::Validator {
-    MnemonicsValidator();
-    constexpr static auto type_name = "MNEMONICS";
+struct MnemonicValidator : public CLI::Validator {
+    MnemonicValidator();
+    constexpr static auto type_name = "MNEMONIC";
 };
 
 struct AddressValidator : public CLI::Validator {
@@ -33,7 +33,7 @@ struct HexValidator : public CLI::Validator {
     constexpr static auto type_name = "HEX";
 };
 
-auto is_mnemonics(const std::string& str) -> bool;
+auto is_mnemonic(const std::string& str) -> bool;
 auto is_hex_string(const std::string& str, size_t length) -> bool;
 
 template <typename T = int>

@@ -6,20 +6,20 @@ set(${SUBPROJ_NAME}_CXX_STANDARD_REQUIRED YES)
 
 set(${SUBPROJ_NAME}_HEADERS
         "Action.hpp"
-        "Api.hpp"
         "App.hpp"
         "Cli.hpp"
         "Contract.hpp"
+        "Mnemonic.hpp"
         "Stuff.hpp"
         "Wallet.hpp")
 
 set(${SUBPROJ_NAME}_SOURCES
         "main.cpp"
         "Action.cpp"
-        "Api.cpp"
         "App.cpp"
         "Cli.cpp"
         "Contract.cpp"
+        "Mnemonic.cpp"
         "Wallet.cpp")
 
 include(BuildHelpers)
@@ -87,13 +87,6 @@ target_include_directories(
 target_link_libraries(${SUBPROJ_NAME} PRIVATE
         tonlib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope ftabi
         CLI11 nlohmann_json::nlohmann_json)
-
-if (MSIG_WITH_API)
-    target_include_directories(${SUBPROJ_NAME} PRIVATE
-            ${PROJECT_ROOT_DIR}/extlibs/beast/include
-            ${PROJECT_ROOT_DIR}/extlibs/asio/include)
-    target_compile_definitions(${SUBPROJ_NAME} PRIVATE MSIG_WITH_API ASIO_STANDALONE BOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
-endif ()
 
 # Size optimizations
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

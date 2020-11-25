@@ -92,7 +92,7 @@ int main(int argc, char** argv)
                 name,
                 [&](const std::string& key_data) { key = check_result(load_key(key_data)); },
                 "Path to keypair file")
-            ->check(CLI::ExistingFile)
+            ->transform(CLI::ExistingFile | MnemonicValidator{})
             ->required();
     };
 
@@ -115,14 +115,6 @@ int main(int argc, char** argv)
     const auto add_timeout_option = [&msg_timeout](CLI::App* subcommand) -> CLI::Option* {
         return subcommand->add_option("--timeout", msg_timeout, "Set message expiration timeout in seconds", true)->check(CLI::Range(10, 86400));
     };
-
-#ifdef MSIG_WITH_API
-    // Subcommand: serve
-
-    bool serve_api{false};
-
-    cmd.add_subcommand("serve", "Start as http server with api")->callback([&] { serve_api = true; });
-#endif
 
     // Subcommand: convert
     cmd.add_subcommand("convert", "Convert address into another formats")->needs(address_option)->callback([&] {
@@ -448,11 +440,6 @@ int main(int argc, char** argv)
         else if (action_find_message) {
             td::actor::send_closure(app, &App::find_message, address, action_find_message(app.get()));
         }
-#ifdef MSIG_WITH_API
-        else if (serve_api) {
-            td::actor::send_closure(app, &App::serve_api);
-        }
-#endif
         app.release();
     });
     scheduler.run();

@@ -26,7 +26,6 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DTON_USE_ROCKSDB=OFF \
             -DTON_USE_ABSEIL=OFF \
-            -DMSIG_WITH_API=OFF \
             -DTON_USE_GDB=OFF \
             -DTON_USE_STACKTRACE=OFF
 
