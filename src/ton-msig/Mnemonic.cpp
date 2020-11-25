@@ -2,10 +2,13 @@
 
 #include <openssl/ecdsa.h>
 #include <openssl/obj_mac.h>
-#include <openssl/ripemd.h>
+#include <td/utils/Random.h>
 #include <td/utils/crypto.h>
+#include <tonlib/keys/bip39.h>
 
-namespace app
+#include <cppcodec/hex_lower.hpp>
+
+namespace app::mnemonic
 {
 constexpr uint32_t SECP256K1_N_0 = 0xD0364141u;
 constexpr uint32_t SECP256K1_N_1 = 0xBFD25E8Cu;
@@ -22,8 +25,10 @@ constexpr uint32_t SECP256K1_N_C_2 = ~SECP256K1_N_2;
 constexpr uint32_t SECP256K1_N_C_3 = ~SECP256K1_N_3;
 constexpr uint32_t SECP256K1_N_C_4 = 1u;
 
-constexpr auto PBKDF2_ROUNDS = 2048;
-constexpr auto HARDENED_BIT = 1u << 31u;
+constexpr uint32_t HARDENED_BIT = 1u << 31u;
+constexpr int PBKDF2_ROUNDS = 2048;
+
+constexpr auto ENTROPY_OFFSET = 8u;
 
 struct CurveSecp256k1 {
     CurveSecp256k1() noexcept
@@ -430,4 +435,121 @@ auto recover_key(const std::string& mnemonic) -> td::Result<td::Ed25519::Private
     return sk.secret_key.create_ed25519_private_key();
 }
 
-}  // namespace app
+enum MnemonicType : uint32_t {
+    Words12 = (128u << ENTROPY_OFFSET) | 4u,
+    Words24 = (256u << ENTROPY_OFFSET) | 8u,
+};
+
+constexpr auto default_mnemonic = MnemonicType::Words12;
+
+auto entropy_bits(MnemonicType type) -> size_t
+{
+    return type >> ENTROPY_OFFSET;
+}
+
+auto checksum_bits(MnemonicType type) -> size_t
+{
+    return type & 0xffu;
+}
+
+auto total_bits(MnemonicType type) -> size_t
+{
+    return entropy_bits(type) + checksum_bits(type);
+}
+
+auto word_count(MnemonicType type) -> size_t
+{
+    return total_bits(type) / 11u;
+}
+
+auto bip39_word(uint16_t i) -> td::SecureString
+{
+    static auto bip_words = normalize_and_split(td::SecureString(tonlib::bip39_english()));
+    CHECK(bip_words.size() == 2048)
+    return bip_words[i].copy();
+}
+
+template <typename T>
+inline constexpr auto make_ones(uint8_t count) -> T
+{
+    return static_cast<T>((T{0b1u} << count) - T{0b1u});
+}
+
+auto generate_words() -> std::vector<td::SecureString>
+{
+    const auto entropy_size = entropy_bits(default_mnemonic) >> 3u;
+    const auto result_len = word_count(default_mnemonic);
+
+    td::BufferSlice buffer(entropy_size + 1);
+    td::Random::secure_bytes(buffer.as_slice().substr(0, entropy_size));
+
+    auto checksum_byte = td::sha256(buffer.as_slice().substr(0, entropy_size))[0];
+    buffer.as_slice()[entropy_size] = checksum_byte;
+
+    std::vector<td::SecureString> result;
+    result.reserve(result_len);
+
+    const auto* slice = buffer.as_slice().ubegin();
+
+    size_t offset = 0;
+    for (int i = 0; i < result_len; i++) {
+        const auto j = offset / 8u;
+
+        const auto first_byte_length = static_cast<uint16_t>(8u - (offset & 0b111u));
+
+        const auto second_byte_length = std::min(11u - first_byte_length, 8u);
+        const auto second_byte_offset = static_cast<uint16_t>(8u - second_byte_length);
+
+        const auto third_byte_length = 11u - first_byte_length - second_byte_length;
+        const auto third_byte_offset = static_cast<uint16_t>(8u - third_byte_length);
+
+        uint16_t word_i{};
+        word_i |= static_cast<uint16_t>(slice[j] & make_ones<uint16_t>(first_byte_length));
+        word_i <<= second_byte_length;
+        word_i |= static_cast<uint16_t>(slice[j + 1] >> second_byte_offset);
+        if (third_byte_length > 0) {
+            word_i <<= third_byte_length;
+            word_i |= static_cast<uint16_t>(slice[j + 2] >> third_byte_offset);
+        }
+
+        offset += 11u;
+
+        result.emplace_back(bip39_word(word_i).copy());
+    }
+
+    return result;
+}
+
+auto generate_phrase() -> td::SecureString
+{
+    const auto words = generate_words();
+
+    size_t res_size = 0;
+    for (size_t i = 0; i < words.size(); i++) {
+        if (i != 0) {
+            res_size++;
+        }
+        res_size += words[i].size();
+    }
+
+    td::SecureString res(res_size);
+    auto dst = res.as_mutable_slice();
+    for (size_t i = 0; i < words.size(); i++) {
+        if (i != 0) {
+            dst[0] = ' ';
+            dst.remove_prefix(1);
+        }
+        dst.copy_from(words[i].as_slice());
+        dst.remove_prefix(words[i].size());
+    }
+
+    return res;
+}
+
+auto generate_key(std::string& mnemonic) -> td::Result<td::Ed25519::PrivateKey>
+{
+    mnemonic = generate_phrase().as_slice().str();
+    return recover_key(mnemonic);
+}
+
+}  // namespace app::mnemonic

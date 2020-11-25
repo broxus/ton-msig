@@ -175,7 +175,7 @@ auto is_hex_string(const std::string& str, size_t length) -> bool
     return true;
 }
 
-auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>
+auto load_key(const std::string& str, std::optional<std::string>& phrase) -> td::Result<td::Ed25519::PrivateKey>
 {
     auto file_r = td::read_file(str);
 
@@ -193,7 +193,8 @@ auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>
         return ton::privkeys::Ed25519{private_key_data.as_slice()}.export_key();
     }
     else if (is_mnemonic(str)) {
-        return recover_key(str);
+        phrase.emplace(str);
+        return mnemonic::recover_key(str);
     }
     else {
         return file_r.move_as_error();

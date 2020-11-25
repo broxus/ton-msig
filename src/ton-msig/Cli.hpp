@@ -10,7 +10,7 @@ namespace app
 {
 struct MnemonicValidator : public CLI::Validator {
     MnemonicValidator();
-    constexpr static auto type_name = "MNEMONIC";
+    constexpr static auto type_name = "PHRASE";
 };
 
 struct AddressValidator : public CLI::Validator {
@@ -46,7 +46,7 @@ auto check_result(td::Result<T>&& result, const std::string& prefix = "") -> T
     return result.move_as_ok();
 }
 
-auto load_key(const std::string& str) -> td::Result<td::Ed25519::PrivateKey>;
+auto load_key(const std::string& str, std::optional<std::string>& phrase) -> td::Result<td::Ed25519::PrivateKey>;
 
 struct MessageInfo {
     td::Bits256 hash{};

@@ -3,7 +3,6 @@
 #include <td/utils/JsonBuilder.h>
 #include <td/utils/port/signals.h>
 #include <tdutils/td/utils/filesystem.h>
-#include <tonlib/keys/Mnemonic.h>
 
 #include <cppcodec/hex_lower.hpp>
 #include <iostream>
@@ -11,6 +10,7 @@
 #include "App.hpp"
 #include "Cli.hpp"
 #include "Contract.hpp"
+#include "Mnemonic.hpp"
 
 using namespace app;
 
@@ -58,7 +58,7 @@ int main(int argc, char** argv)
     std::function<td::Promise<Wallet::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
 
     CLI::App cmd{PROJECT_NAME};
-    cmd.get_formatter()->column_width(44);
+    cmd.get_formatter()->column_width(45);
     cmd.set_help_all_flag("--help-all", "Print extended help message and exit");
     cmd.set_version_flag("-v,--version", PROJECT_VER);
 
@@ -85,13 +85,14 @@ int main(int argc, char** argv)
 
     // subcommands helpers
 
+    std::optional<std::string> phrase;
     std::optional<td::Ed25519::PrivateKey> key;
-    const auto add_signature_option = [&key](CLI::App* subcommand, const char* name = "-s,--sign") -> CLI::Option* {
+    const auto add_signature_option = [&key, &phrase](CLI::App* subcommand, const char* name = "-s,--sign") -> CLI::Option* {
         return subcommand
             ->add_option_function<std::string>(
                 name,
-                [&](const std::string& key_data) { key = check_result(load_key(key_data)); },
-                "Path to keypair file")
+                [&](const std::string& key_data) { key = check_result(load_key(key_data, phrase)); },
+                "Mnemonic or path to keypair file")
             ->transform(CLI::ExistingFile | MnemonicValidator{})
             ->required();
     };
@@ -158,7 +159,8 @@ int main(int argc, char** argv)
     add_signature_option(cmd_generate, "-f,--from")->required(false);
     cmd_generate->callback([&] {
         const auto from_existing = key.has_value();
-        const auto private_key = from_existing ? std::move(key.value()) : ton::privkeys::Ed25519::random().export_key();
+        std::string new_phrase{};
+        const auto private_key = from_existing ? std::move(key.value()) : check_result(mnemonic::generate_key(new_phrase));
         const auto public_key = check_result(private_key.get_public_key());
 
         nlohmann::json j{
@@ -167,6 +169,12 @@ int main(int argc, char** argv)
         if (from_existing || gen_addr) {
             const auto addr = check_result(Contract::generate_addr(public_key));
             j["address"] = std::to_string(workchain) + ":" + addr.to_hex();
+        }
+        if (phrase.has_value()) {
+            j["phrase"] = phrase.value();
+        }
+        else if (!new_phrase.empty()) {
+            j["phrase"] = new_phrase;
         }
 
         std::cout << j.dump(4) << std::endl;

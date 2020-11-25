@@ -17,15 +17,15 @@ ton-msig
 Usage: ./ton-msigd [OPTIONS] [addr] SUBCOMMAND
 
 Positionals:
-  addr ADDRESS:ADDRESS                      Wallet contract address
+  addr ADDRESS:ADDRESS                       Wallet contract address
 
 Options:
-  -h,--help                                 Print this help message and exit
-  --help-all                                Print extended help message and exit
-  -v,--version                              Display program version information and exit
-  -l,--log-level INT:INT in [1 - 7]=3       Log verbosity level
-  -t,--threads UINT:POSITIVE=2              Thread count
-  -c,--config TEXT:FILE                     Path to global config
+  -h,--help                                  Print this help message and exit
+  --help-all                                 Print extended help message and exit
+  -v,--version                               Display program version information and exit
+  -l,--log-level INT:INT in [1 - 7]=3        Log verbosity level
+  -t,--threads UINT:POSITIVE=2               Thread count
+  -c,--config TEXT:FILE                      Path to global config
 
 Subcommands:
 convert
@@ -34,25 +34,24 @@ convert
 getpubkey
   Get public key from private
   Positionals:
-    privkey TEXT:KEY REQUIRED                 Private key hex
+    privkey TEXT:KEY REQUIRED                  Private key hex
 
 generate
   Generate new keypair and address
   Options:
-    -a,--addr BOOLEAN=1                       Whether to generate an address
-    -w,--workchain INT:INT in [-1 - 0]        Workchain
-    -f,--from TEXT:(FILE) OR (MNEMONIC)      Path to keypair file
+    -a,--addr BOOLEAN=1                        Whether to generate an address
+    -w,--workchain INT:INT in [-1 - 0]         Workchain
+    -f,--from TEXT:(FILE) OR (PHRASE)          Mnemonic or path to keypair file
 
 deploy
   Deploy new contract
   Options:
-    -s,--sign TEXT:(FILE) OR (MNEMONIC) REQUIRED
-                                              Path to keypair file
-    -w,--workchain INT:INT in [-1 - 0]        Workchain
-    -o,--owner TEXT:KEY ... REQUIRED          Custodian public key
-    -r,--req-confirms UINT:INT in [1 - 32]=1  Number of confirmations required for executing transaction
-    --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
-    --save TEXT                               Save message info to file
+    -s,--sign TEXT:(FILE) OR (PHRASE) REQUIRED Mnemonic or path to keypair file
+    -w,--workchain INT:INT in [-1 - 0]         Workchain
+    -o,--owner TEXT:KEY ... REQUIRED           Custodian public key
+    -r,--req-confirms UINT:INT in [1 - 32]=1   Number of confirmations required for executing transaction
+    --timeout UINT:INT in [10 - 86400]=60      Set message expiration timeout in seconds
+    --save TEXT                                Save message info to file
 
 info
   Get account info
@@ -60,39 +59,37 @@ info
 find
   Find entity by id
   Subcommands:
-    message                                   Find message by hash
+    message                                    Find message by hash
 
 submitTransaction
   Create new transaction
   Positionals:
-    dest TEXT:ADDRESS REQUIRED                Destination address
-    value TEXT:TON REQUIRED                   Message value in TON
+    dest TEXT:ADDRESS REQUIRED                 Destination address
+    value TEXT:TON REQUIRED                    Message value in TON
   Options:
-    --all-balance BOOLEAN=0                   Send all balance and delete contract
-    --bounce BOOLEAN=1                        Return message back when it is send to uninitialized address
-    --payload TEXT                            Serialized bag of cells of message body
-    -s,--sign TEXT:(FILE) OR (MNEMONIC) REQUIRED
-                                              Path to keypair file
-    --local                                   Force local execution
-    --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
-    --save TEXT                               Save message info to file
+    --all-balance BOOLEAN=0                    Send all balance and delete contract
+    --bounce BOOLEAN=1                         Return message back when it is send to uninitialized address
+    --payload TEXT                             Serialized bag of cells of message body
+    -s,--sign TEXT:(FILE) OR (PHRASE) REQUIRED Mnemonic or path to keypair file
+    --local                                    Force local execution
+    --timeout UINT:INT in [10 - 86400]=60      Set message expiration timeout in seconds
+    --save TEXT                                Save message info to file
 
 confirmTransaction
   Confirm pending transaction
   Positionals:
-    transactionId UINT REQUIRED               Transaction id
+    transactionId UINT REQUIRED                Transaction id
   Options:
-    -s,--sign TEXT:(FILE) OR (MNEMONIC) REQUIRED
-                                              Path to keypair file
-    --local                                   Force local execution
-    --timeout UINT:INT in [10 - 86400]=60     Set message expiration timeout in seconds
-    --save TEXT                               Save message info to file
+    -s,--sign TEXT:(FILE) OR (PHRASE) REQUIRED Mnemonic or path to keypair file
+    --local                                    Force local execution
+    --timeout UINT:INT in [10 - 86400]=60      Set message expiration timeout in seconds
+    --save TEXT                                Save message info to file
 
 isConfirmed
   Check if transactions are confirmed
   Positionals:
-    mask UINT:POSITIVE REQUIRED               Mask
-    index UINT:POSITIVE REQUIRED              Index
+    mask UINT:POSITIVE REQUIRED                Mask
+    index UINT:POSITIVE REQUIRED               Index
 
 getParameters
   Get msig parameters
@@ -100,7 +97,7 @@ getParameters
 getTransaction
   Get transaction info
   Positionals:
-    transactionId UINT:POSITIVE REQUIRED      Transaction id
+    transactionId UINT:POSITIVE REQUIRED       Transaction id
 
 getTransactions
   Get pending transactions
