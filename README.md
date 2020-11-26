@@ -11,10 +11,12 @@
     </p>
 </p>
 
+### [Wiki](https://github.com/broxus/ton-msig/wiki)
+
 ### Usage
 ```
 ton-msig
-Usage: ./ton-msigd [OPTIONS] [addr] SUBCOMMAND
+Usage: ./ton-msig [OPTIONS] [addr] SUBCOMMAND
 
 Positionals:
   addr ADDRESS:ADDRESS                       Wallet contract address
