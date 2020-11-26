@@ -9,9 +9,8 @@
             <img alt="GitHub Workflow Status" src="https://img.shields.io/github/workflow/status/broxus/ton-msig/master" />
         </a>
     </p>
+    <p align="center"><a href="https://github.com/broxus/ton-msig/wiki">Wiki</a></p>
 </p>
-
-### [Wiki](https://github.com/broxus/ton-msig/wiki)
 
 ### Usage
 ```
