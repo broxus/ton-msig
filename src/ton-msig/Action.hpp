@@ -229,7 +229,7 @@ struct GetTransactions final : Action<std::vector<Transaction>> {
     [[nodiscard]] auto is_get_method() const -> bool final { return true; };
 };
 
-struct GetTransactionIds final : Action<std::vector<td::uint64>> {
+struct GetTransactionIds final : Action<std::vector<std::string>> {
     explicit GetTransactionIds(Handler&& promise);
 
     static auto output_type() -> ftabi::ParamRef;

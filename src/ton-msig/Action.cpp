@@ -128,7 +128,7 @@ void to_json(nlohmann::json& j, const Parameters& v)
     j = nlohmann::json{
         {"maxQueuedTransactions", v.max_queued_transactions},
         {"maxCustodianCount", v.max_custodian_count},
-        {"expirationTime", v.expiration_time},
+        {"expirationTime", std::to_string(v.expiration_time)},
         {"minValue", v.min_value.to_dec_string()},
         {"requiredTxnConfirms", v.required_txn_confirms}};
 }
@@ -136,7 +136,7 @@ void to_json(nlohmann::json& j, const Parameters& v)
 void to_json(nlohmann::json& j, const Transaction& v)
 {
     j = nlohmann::json{
-        {"id", v.id},
+        {"id", std::to_string(v.id)},
         {"confirmationMask", v.confirmationMask},
         {"signsRequired", v.signsRequired},
         {"signsReceived", v.signsReceived},
@@ -157,7 +157,7 @@ void to_json(nlohmann::json& j, const Custodian& v)
 
 void to_json(nlohmann::json& j, const TransactionSent& v)
 {
-    j = nlohmann::json{{"transactionId", v.transactionId}};
+    j = nlohmann::json{{"transactionId", std::to_string(v.transactionId)}};
 }
 
 void to_json(nlohmann::json& j, const Confirmation& v)
@@ -511,7 +511,8 @@ auto GetTransactionIds::handle_result(std::vector<ftabi::ValueRef>&& result) -> 
     Result deserialized;
     deserialized.reserve(array.values.size());
     for (const auto& item : array.values) {
-        deserialized.emplace_back(item->as<ValueInt>().get<td::uint64>());
+        const auto transaction_id = item->as<ValueInt>().get<td::uint64>();
+        deserialized.emplace_back(std::to_string(transaction_id));
     }
 
     promise.set_result(deserialized);
