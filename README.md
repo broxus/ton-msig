@@ -37,6 +37,13 @@ getpubkey
   Positionals:
     privkey TEXT:KEY REQUIRED                  Private key hex
 
+gensignature
+  Sign tree of cells
+  Positionals:
+    cells TEXT                                 Hex encoded serialized tree of cells
+  Options:
+    -s,--sign TEXT:(FILE) OR (PHRASE) REQUIRED Mnemonic or path to keypair file
+
 generate
   Generate new keypair and address
   Options:

@@ -118,6 +118,7 @@ int main(int argc, char** argv)
     };
 
     // Subcommand: convert
+
     cmd.add_subcommand("convert", "Convert address into another formats")->needs(address_option)->callback([&] {
         nlohmann::json j;
         j["raw"] = std::to_string(address.workchain) + ":" + address.addr.to_hex();
@@ -146,6 +147,34 @@ int main(int argc, char** argv)
         CHECK(key.has_value())
         const auto public_key = check_result(key->get_public_key());
         std::cout << nlohmann::json{{"public", cppcodec::hex_lower::encode(public_key.as_octet_string())}}.dump(4) << std::endl;
+        std::exit(0);
+    });
+
+    // Sign tree of cells
+
+    td::Ref<vm::Cell> payload{vm::CellBuilder{}.finalize()};
+    auto cmd_sign = cmd.add_subcommand("gensignature", "Sign tree of cells");
+    add_signature_option(cmd_sign)->required(true);
+    cmd_sign->add_option_function<std::string>(
+        "cells",
+        [&](const std::string& str) {
+            if (str.empty()) {
+                return;
+            }
+            try {
+                const auto decoded = cppcodec::hex_lower::decode(str);
+                payload = check_result(vm::std_boc_deserialize(td::Slice(decoded.data(), decoded.size())));
+            } catch(const cppcodec::parse_error& e) {
+                check_result<td::Unit>(td::Status::Error(td::Slice(e.what())));
+            }
+        },
+        "Hex encoded serialized tree of cells");
+    cmd_sign->callback([&] {
+        CHECK(key.has_value())
+        const auto hash = payload->get_hash();
+        TRY_RESULT(signature, key->sign(hash.as_slice()))
+
+        std::cout << nlohmann::json{{"signature", cppcodec::hex_lower::encode(signature.as_slice())}}.dump(4) << std::endl;
         std::exit(0);
     });
 
@@ -278,7 +307,6 @@ int main(int argc, char** argv)
     td::BigInt256 value{};
     bool all_balance = false;
     bool bounce = true;
-    td::Ref<vm::Cell> payload{vm::CellBuilder{}.finalize()};
 
     auto* cmd_submit_transaction = cmd.add_subcommand("submitTransaction", "Create new transaction")->needs(address_option);
     cmd_submit_transaction
