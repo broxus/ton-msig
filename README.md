@@ -51,6 +51,11 @@ generate
     -w,--workchain INT:INT in [-1 - 0]         Workchain
     -f,--from TEXT:(FILE) OR (PHRASE)          Mnemonic or path to keypair file
 
+mine
+  Mine pretty address
+  Positionals:
+    prefix TEXT REQUIRED                       Target address prefix in hex format
+
 deploy
   Deploy new contract
   Options:
