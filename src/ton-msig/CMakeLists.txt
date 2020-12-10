@@ -6,6 +6,7 @@ set(${SUBPROJ_NAME}_CXX_STANDARD_REQUIRED YES)
 
 set(${SUBPROJ_NAME}_HEADERS
         "Action.hpp"
+        "AddressGenerator.hpp"
         "App.hpp"
         "Cli.hpp"
         "Contract.hpp"
@@ -16,6 +17,7 @@ set(${SUBPROJ_NAME}_HEADERS
 set(${SUBPROJ_NAME}_SOURCES
         "main.cpp"
         "Action.cpp"
+        "AddressGenerator.cpp"
         "App.cpp"
         "Cli.cpp"
         "Contract.cpp"

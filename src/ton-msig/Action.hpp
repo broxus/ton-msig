@@ -10,6 +10,8 @@ namespace app
 using EncodedMessage = std::tuple<ftabi::FunctionRef, td::Ref<vm::Cell>, td::Ref<vm::Cell>>;
 
 struct ActionBase {
+    virtual ~ActionBase() = default;
+
     virtual auto create_message() -> td::Result<EncodedMessage> = 0;
     virtual auto handle_prepared(const td::Ref<vm::Cell>& message) -> td::Status { return td::Status::OK(); };
     virtual auto handle_result(std::vector<ftabi::ValueRef>&& result) -> td::Status = 0;

@@ -7,6 +7,7 @@
 #include <cppcodec/hex_lower.hpp>
 #include <iostream>
 
+#include "AddressGenerator.hpp"
 #include "App.hpp"
 #include "Cli.hpp"
 #include "Contract.hpp"
@@ -164,7 +165,8 @@ int main(int argc, char** argv)
             try {
                 const auto decoded = cppcodec::hex_lower::decode(str);
                 payload = check_result(vm::std_boc_deserialize(td::Slice(decoded.data(), decoded.size())));
-            } catch(const cppcodec::parse_error& e) {
+            }
+            catch (const cppcodec::parse_error& e) {
                 check_result<td::Unit>(td::Status::Error(td::Slice(e.what())));
             }
         },
@@ -209,6 +211,14 @@ int main(int argc, char** argv)
         std::cout << j.dump(4) << std::endl;
         std::exit(0);
     });
+
+    // Subcommand: mine
+
+    std::string prefix{};
+
+    auto* cmd_mine = cmd.add_subcommand("mine", "Mine pretty address");
+    cmd_mine->add_option("prefix", prefix, "Target address prefix in hex format")->required();
+    cmd_mine->callback([&] { check_result(app::generate_address(prefix)); });
 
     // Subcommand: deploy
 
