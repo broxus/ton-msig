@@ -1,10 +1,10 @@
-#include "Wallet.hpp"
+#include "Contract.hpp"
 
 #include <ton/lite-tl.hpp>
 
 namespace app
 {
-Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, AccountInfoHandler&& promise)
+Contract::Contract(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, AccountInfoHandler&& promise)
     : parent_{std::move(parent)}
     , mode_{Mode::get_account_info}
     , state_{State::getting_account_info}
@@ -14,7 +14,7 @@ Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, con
     client_.set_client(std::move(ext_client_ref));
 }
 
-Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, FindMessage&& action)
+Contract::Contract(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, FindMessage&& action)
     : parent_{std::move(parent)}
     , mode_{Mode::find_message_by_hash}
     , state_{State::getting_account_info}
@@ -28,7 +28,7 @@ Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, con
     client_.set_client(std::move(ext_client_ref));
 }
 
-Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context)
+Contract::Contract(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context)
     : parent_{std::move(parent)}
     , mode_{Mode::send_message}
     , state_{State::getting_account_info}
@@ -39,12 +39,12 @@ Wallet::Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, con
     client_.set_client(std::move(ext_client_ref));
 }
 
-void Wallet::start_up()
+void Contract::start_up()
 {
     get_last_block_state();
 }
 
-void Wallet::loop()
+void Contract::loop()
 {
     LOG(DEBUG) << "Loop called for state: " << static_cast<int>(state_);
     if (state_ == State::waiting_transaction_sleep) {
@@ -53,21 +53,21 @@ void Wallet::loop()
     }
 }
 
-void Wallet::get_last_block_state()
+void Contract::get_last_block_state()
 {
     LOG(DEBUG) << "get last block state";
     auto last_block_handler = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<lite_api_ptr<lite_api::liteServer_masterchainInfo>> R) {
         if (R.is_error()) {
-            td::actor::send_closure(SelfId, &Wallet::finish, R.move_as_error());
+            td::actor::send_closure(SelfId, &Contract::finish, R.move_as_error());
         }
         else {
-            td::actor::send_closure(SelfId, &Wallet::got_last_block_state, R.move_as_ok());
+            td::actor::send_closure(SelfId, &Contract::got_last_block_state, R.move_as_ok());
         }
     });
     client_.send_query(lite_api::liteServer_getMasterchainInfo(), std::move(last_block_handler));
 }
 
-void Wallet::got_last_block_state(lite_api_ptr<lite_api::liteServer_masterchainInfo>&& last_block_state)
+void Contract::got_last_block_state(lite_api_ptr<lite_api::liteServer_masterchainInfo>&& last_block_state)
 {
     last_block_id_ = ton::create_block_id(last_block_state->last_);
 
@@ -76,22 +76,22 @@ void Wallet::got_last_block_state(lite_api_ptr<lite_api::liteServer_masterchainI
     get_account_state();
 }
 
-void Wallet::get_account_state()
+void Contract::get_account_state()
 {
     LOG(DEBUG) << "get account state" << last_block_id_.to_str();
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<lite_api_ptr<lite_api::liteServer_accountState>> R) mutable {
         if (R.is_error()) {
-            td::actor::send_closure(SelfId, &Wallet::finish, R.move_as_error());
+            td::actor::send_closure(SelfId, &Contract::finish, R.move_as_error());
         }
         else {
-            td::actor::send_closure(SelfId, &Wallet::got_account_state, R.move_as_ok());
+            td::actor::send_closure(SelfId, &Contract::got_account_state, R.move_as_ok());
         }
     });
     client_.send_query(lite_api::liteServer_getAccountState(ton::create_tl_lite_block_id(last_block_id_), to_lite_api(addr_)), std::move(P));
 }
 
-void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&& account_state)
+void Contract::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&& account_state)
 {
     LOG(DEBUG) << "got account state" << last_block_id_.to_str();
 
@@ -211,21 +211,21 @@ void Wallet::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>&&
     CHECK(false)
 }
 
-void Wallet::get_last_transactions(td::int32 count)
+void Contract::get_last_transactions(td::int32 count)
 {
     LOG(DEBUG) << "get last transaction " << last_transaction_lt_ << ":" << last_transaction_hash_.to_hex();
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<lite_api_ptr<lite_api::liteServer_transactionList>> R) mutable {
         if (R.is_error()) {
-            td::actor::send_closure(SelfId, &Wallet::finish, R.move_as_error());
+            td::actor::send_closure(SelfId, &Contract::finish, R.move_as_error());
         }
         else {
-            td::actor::send_closure(SelfId, &Wallet::got_last_transactions, R.move_as_ok());
+            td::actor::send_closure(SelfId, &Contract::got_last_transactions, R.move_as_ok());
         }
     });
     client_.send_query(lite_api::liteServer_getTransactions(count, to_lite_api(addr_), last_transaction_lt_, last_transaction_hash_), std::move(P));
 }
 
-void Wallet::got_last_transactions(lite_api_ptr<lite_api::liteServer_transactionList>&& transactions_list)
+void Contract::got_last_transactions(lite_api_ptr<lite_api::liteServer_transactionList>&& transactions_list)
 {
     LOG(DEBUG) << "got last transaction " << last_transaction_lt_ << ":" << last_transaction_hash_.to_hex();
 
@@ -291,7 +291,7 @@ void Wallet::got_last_transactions(lite_api_ptr<lite_api::liteServer_transaction
     get_last_transactions(1);
 }
 
-auto Wallet::run_local() -> td::Status
+auto Contract::run_local() -> td::Status
 {
     LOG(DEBUG) << "Run local";
 
@@ -305,7 +305,7 @@ auto Wallet::run_local() -> td::Status
     return context_->handle_result(std::move(output));
 }
 
-auto Wallet::run_remote() -> td::Status
+auto Contract::run_remote() -> td::Status
 {
     LOG(DEBUG) << "Run remote";
 
@@ -328,22 +328,22 @@ auto Wallet::run_remote() -> td::Status
     return td::Status::OK();
 }
 
-void Wallet::send_message(td::BufferSlice&& message)
+void Contract::send_message(td::BufferSlice&& message)
 {
     LOG(DEBUG) << "Send message";
 
     auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<lite_api_ptr<lite_api::liteServer_sendMsgStatus>> R) mutable {
         if (R.is_error()) {
-            td::actor::send_closure(SelfId, &Wallet::finish, R.move_as_error());
+            td::actor::send_closure(SelfId, &Contract::finish, R.move_as_error());
         }
         else {
-            td::actor::send_closure(SelfId, &Wallet::sent_message, R.move_as_ok());
+            td::actor::send_closure(SelfId, &Contract::sent_message, R.move_as_ok());
         }
     });
     client_.send_query(lite_api::liteServer_sendMessage(std::move(message)), std::move(P));
 }
 
-void Wallet::sent_message(lite_api_ptr<lite_api::liteServer_sendMsgStatus>&& send_msg_status)
+void Contract::sent_message(lite_api_ptr<lite_api::liteServer_sendMsgStatus>&& send_msg_status)
 {
     LOG(DEBUG) << "Sent message";
 
@@ -355,7 +355,7 @@ void Wallet::sent_message(lite_api_ptr<lite_api::liteServer_sendMsgStatus>&& sen
     get_last_block_state();
 }
 
-auto Wallet::found_transaction(block::gen::Transaction::Record&& transaction) -> td::Status
+auto Contract::found_transaction(block::gen::Transaction::Record&& transaction) -> td::Status
 {
     LOG(DEBUG) << "Found transaction";
 
@@ -396,7 +396,7 @@ auto Wallet::found_transaction(block::gen::Transaction::Record&& transaction) ->
     return td::Status::Error("no external output messages");
 }
 
-void Wallet::check(td::Status status)
+void Contract::check(td::Status status)
 {
     if (status.is_error()) {
         LOG(DEBUG) << status.message();
@@ -417,13 +417,13 @@ void Wallet::check(td::Status status)
     }
 }
 
-void Wallet::finish(td::Status status)
+void Contract::finish(td::Status status)
 {
     check(status.move_as_error());
     stop();
 }
 
-void to_json(nlohmann::json& j, const Wallet::BriefAccountInfo& v)
+void to_json(nlohmann::json& j, const Contract::BriefAccountInfo& v)
 {
     j = nlohmann::json{
         {"state", to_string(v.status)},
@@ -433,7 +433,7 @@ void to_json(nlohmann::json& j, const Wallet::BriefAccountInfo& v)
         {"syncTime", v.sync_time}};
 }
 
-void to_json(nlohmann::json& j, const Wallet::BriefMessageInfo& v)
+void to_json(nlohmann::json& j, const Contract::BriefMessageInfo& v)
 {
     j = nlohmann::json{
         {"found", v.found},  //

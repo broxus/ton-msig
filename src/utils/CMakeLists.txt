@@ -1,22 +1,34 @@
-set(SUBPROJ_NAME ton-msig)
+set(SUBPROJ_NAME utils)
 
 set(${SUBPROJ_NAME}_CXX_STANDARD 17)
 set(${SUBPROJ_NAME}_CXX_EXTENSIONS OFF)
 set(${SUBPROJ_NAME}_CXX_STANDARD_REQUIRED YES)
 
 set(${SUBPROJ_NAME}_HEADERS
-        "MsigActions.hpp"
-        "AddressGenerator.hpp")
+        "Action.hpp"
+        "App.hpp"
+        "Cli.hpp"
+        "Mnemonic.hpp"
+        "Stuff.hpp"
+        "Contract.hpp")
 
 set(${SUBPROJ_NAME}_SOURCES
-        "main.cpp"
-        "MsigActions.cpp"
-        "AddressGenerator.cpp")
+        "Action.cpp"
+        "App.cpp"
+        "Cli.cpp"
+        "Mnemonic.cpp"
+        "Contract.cpp")
 
 include(BuildHelpers)
 set(${SUBPROJ_NAME}_RES_DIR ${CMAKE_CURRENT_BINARY_DIR}/res)
 
-set(${SUBPROJ_NAME}_RES "${${SUBPROJ_NAME}_RES_DIR}/safe_multisig_wallet_tvc.h")
+configure_file(${RESOURCE_DIR}/config.h.in "${${SUBPROJ_NAME}_RES_DIR}/config.h")
+embed_resource("${RESOURCE_DIR}/mainnet.config.json" "${${SUBPROJ_NAME}_RES_DIR}/mainnet_config_json.h" MAINNET_CONFIG_JSON SIGNED)
+embed_resource("${RESOURCE_DIR}/SafeMultisigWallet.tvc" "${${SUBPROJ_NAME}_RES_DIR}/safe_multisig_wallet_tvc.h" SAFE_MULTISIG_WALLET_TVC UNSIGNED)
+
+set(${SUBPROJ_NAME}_RES
+        "${${SUBPROJ_NAME}_RES_DIR}/config.h"
+        "${${SUBPROJ_NAME}_RES_DIR}/mainnet_config_json.h")
 
 # ############################################################### #
 # Options ####################################################### #
@@ -39,8 +51,8 @@ set(
 # Create target for build ####################################### #
 # ############################################################### #
 
-add_executable(
-        ${SUBPROJ_NAME}
+add_library(
+        ${SUBPROJ_NAME} STATIC
         ${${SUBPROJ_NAME}_ALL_SRCS})
 
 # Enable C++17 on this project
@@ -50,21 +62,23 @@ set_target_properties(
         CXX_EXTENSIONS ${${SUBPROJ_NAME}_CXX_EXTENSIONS}
         CXX_STANDARD_REQUIRED ${${SUBPROJ_NAME}_CXX_STANDARD_REQUIRED})
 
-# Set specific properties
-set_target_properties(
-        ${SUBPROJ_NAME} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin"
-        ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib"
-        LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib"
-        OUTPUT_NAME "${SUBPROJ_NAME}$<$<CONFIG:Debug>:d>")
-
 # Set include directories for this project and if it will use as installing
-target_link_libraries(${SUBPROJ_NAME} PUBLIC utils)
+target_include_directories(
+        ${SUBPROJ_NAME}
+        PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<BUILD_INTERFACE:${PROJECT_ROOT_DIR}/extlibs/cppcodec>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+
+target_link_libraries(${SUBPROJ_NAME} PUBLIC
+        tonlib tdactor adnllite tl_lite_api tl-lite-utils ton_crypto ton_block lite-client-common smc-envelope ftabi
+        CLI11 nlohmann_json::nlohmann_json)
 
 # Size optimizations
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(${SUBPROJ_NAME} PRIVATE -ffunction-sections -fdata-sections)
-    target_link_libraries(${SUBPROJ_NAME} PRIVATE -Wl,--gc-sections)
+    target_compile_options(${SUBPROJ_NAME} PUBLIC -ffunction-sections -fdata-sections)
+    target_link_libraries(${SUBPROJ_NAME} PUBLIC -Wl,--gc-sections)
 endif ()
 
 # Enable IPO
@@ -79,29 +93,3 @@ if (result)
 else ()
     message("INTERPROCEDURAL_OPTIMIZATION disabled")
 endif ()
-
-# ############################################################### #
-# Installing #################################################### #
-# ############################################################### #
-
-# Create export targets
-install(
-        TARGETS ${SUBPROJ_NAME}
-        EXPORT ${SUBPROJ_NAME}-targets)
-
-# Set out paths
-install(
-        TARGETS ${SUBPROJ_NAME}
-        DESTINATION /usr/bin
-        RUNTIME DESTINATION /usr/bin)
-
-if (BUILD_DEB_PACKAGE)
-    set(CPACK_GENERATOR "DEB")
-    set(CPACK_PACKAGE_VERSION_MAJOR "${_PROJECT_MAJOR_VERSION}")
-    set(CPACK_PACKAGE_VERSION_MINOR "${_PROJECT_MINOR_VERSION}")
-    set(CPACK_PACKAGE_VERSION_PATCH "${_PROJECT_PATCH_VERSION}")
-    set(CPACK_PACKAGE_DESCRIPTION "Tool for TON multisignature wallets")
-    set(CPACK_PACKAGE_CONTACT "Ivan Kalinin reide740@dexpa.io")
-
-    include(CPack)
-endif()

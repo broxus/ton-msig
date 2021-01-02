@@ -10,8 +10,8 @@
 #include "AddressGenerator.hpp"
 #include "App.hpp"
 #include "Cli.hpp"
-#include "Contract.hpp"
 #include "Mnemonic.hpp"
+#include "MsigActions.hpp"
 
 using namespace app;
 
@@ -55,8 +55,8 @@ int main(int argc, char** argv)
     td::actor::ActorOwn<App> app;
 
     std::function<std::unique_ptr<ActionBase>(const td::actor::ActorId<App>&)> action_make_request;
-    std::function<Wallet::FindMessage(const td::actor::ActorId<App>&)> action_find_message;
-    std::function<td::Promise<Wallet::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
+    std::function<Contract::FindMessage(const td::actor::ActorId<App>&)> action_find_message;
+    std::function<td::Promise<Contract::BriefAccountInfo>(const td::actor::ActorId<App>&)> action_get_account_info;
 
     CLI::App cmd{PROJECT_NAME};
     cmd.get_formatter()->column_width(45);
@@ -198,7 +198,7 @@ int main(int argc, char** argv)
             {"public", cppcodec::hex_lower::encode(public_key.as_octet_string())},
             {"secret", cppcodec::hex_lower::encode(private_key.as_octet_string())}};
         if (from_existing || gen_addr) {
-            const auto addr = check_result(Contract::generate_addr(public_key));
+            const auto addr = check_result(generate_addr(public_key));
             j["address"] = std::to_string(workchain) + ":" + addr.to_hex();
         }
         if (phrase.has_value()) {
@@ -218,7 +218,7 @@ int main(int argc, char** argv)
 
     auto* cmd_mine = cmd.add_subcommand("mine", "Mine pretty address");
     cmd_mine->add_option("prefix", prefix, "Target address prefix in hex format")->required();
-    cmd_mine->callback([&] { check_result(app::generate_address(prefix)); });
+    cmd_mine->callback([&] { check_result(app::mine_pretty_addr(prefix)); });
 
     // Subcommand: deploy
 
@@ -250,7 +250,7 @@ int main(int argc, char** argv)
     add_msg_info_path_option(cmd_deploy);
     cmd_deploy->callback([&] {
         const auto public_key = check_result(key->get_public_key());
-        const auto addr = check_result(Contract::generate_addr(public_key));
+        const auto addr = check_result(generate_addr(public_key));
         address = block::StdAddress{workchain, addr, false};
 
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
@@ -279,7 +279,7 @@ int main(int argc, char** argv)
 
     cmd.add_subcommand("info", "Get account info")->needs(address_option)->callback([&] {
         action_get_account_info = [&](const td::actor::ActorId<App>& actor_id) {
-            using Result = Wallet::BriefAccountInfo;
+            using Result = Contract::BriefAccountInfo;
             return create_handler<Result>(actor_id, &print_as_json<Result>);
         };
     });
@@ -301,8 +301,8 @@ int main(int argc, char** argv)
     cmd_find_message->add_flag("--no-wait", dont_wait_until_appears, "Don't wait for the message you are looking for");
     cmd_find_message->callback([&] {
         action_find_message = [&](const td::actor::ActorId<App>& actor_id) {
-            using Result = Wallet::BriefMessageInfo;
-            return Wallet::FindMessage{
+            using Result = Contract::BriefMessageInfo;
+            return Contract::FindMessage{
                 create_handler<Result>(actor_id, &print_as_json<Result>),
                 message_info.hash,
                 message_info.created_at,

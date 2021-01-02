@@ -8,6 +8,7 @@ set(_PROJECT_MINOR_VERSION 0)
 set(_PROJECT_PATCH_VERSION 4)
 
 set(SUBPROJECT_LIST
+        "src/utils"
         "src/ton-msig"
         )
 

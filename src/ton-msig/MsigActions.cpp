@@ -1,11 +1,11 @@
-#include "Action.hpp"
+#include "MsigActions.hpp"
 
 #include <td/utils/base64.h>
 #include <td/utils/filesystem.h>
 
 #include <utility>
 
-#include "Contract.hpp"
+#include "AddressGenerator.hpp"
 #include "Stuff.hpp"
 
 using namespace ftabi;
@@ -17,37 +17,6 @@ namespace
 auto make_header_params() -> HeaderParams
 {
     return ftabi::make_named_params(std::make_pair("pubkey", ParamPublicKey{}), std::make_pair("time", ParamTime{}), std::make_pair("expire", ParamExpire{}));
-}
-
-auto empty_function_call() -> FunctionCallRef
-{
-    static FunctionCallRef call{FunctionCall{{}}};
-    return call;
-}
-
-template <typename T>
-auto check_output(const std::vector<ftabi::ValueRef>& output) -> td::Status
-{
-    constexpr td::Slice INVALID_OUTPUT = "invalid output";
-
-    if constexpr (std::is_same_v<decltype(T::output_type()), std::vector<ParamRef>>) {
-        auto params = T::output_type();
-        if (output.size() != params.size()) {
-            return td::Status::Error(INVALID_OUTPUT);
-        }
-        for (size_t i = 0; i < params.size(); ++i) {
-            if (!output[i]->check_type(params[i])) {
-                return td::Status::Error(INVALID_OUTPUT);
-            }
-        }
-    }
-    else {
-        if (output.size() != 1 || !output[0]->check_type(T::output_type())) {
-            return td::Status::Error("invalid output");
-        }
-    }
-
-    return td::Status::OK();
 }
 
 auto transaction_param() -> ParamTuple
@@ -210,7 +179,7 @@ auto Constructor::create_message() -> td::Result<EncodedMessage>
 
     FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
 
-    TRY_RESULT(init_state, Contract::generate_state_init(public_key))
+    TRY_RESULT(init_state, generate_state_init(public_key))
     TRY_RESULT(body, function->encode_input(call))
 
     return std::make_tuple(function, std::move(init_state), std::move(body));

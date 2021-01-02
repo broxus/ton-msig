@@ -19,19 +19,19 @@ void App::close()
 void App::make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action)
 {
     auto id = actor_id_++;
-    actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(action));
+    actors_[id] = td::actor::create_actor<Contract>(Contract::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(action));
 }
 
-void App::get_account_info(const block::StdAddress& addr, td::Promise<Wallet::BriefAccountInfo>&& promise)
+void App::get_account_info(const block::StdAddress& addr, td::Promise<Contract::BriefAccountInfo>&& promise)
 {
     auto id = actor_id_++;
-    actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(promise));
+    actors_[id] = td::actor::create_actor<Contract>(Contract::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(promise));
 }
 
-void App::find_message(const block::StdAddress& addr, Wallet::FindMessage&& action)
+void App::find_message(const block::StdAddress& addr, Contract::FindMessage&& action)
 {
     auto id = actor_id_++;
-    actors_[id] = td::actor::create_actor<Wallet>(Wallet::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(action));
+    actors_[id] = td::actor::create_actor<Contract>(Contract::actor_name, client_.get_client(), actor_shared(this, id), addr, std::move(action));
 }
 
 void App::start_up()

@@ -18,7 +18,7 @@ namespace app
 {
 using namespace tonlib;
 
-class Wallet final : public td::actor::Actor {
+class Contract final : public td::actor::Actor {
     enum class Mode {
         get_account_info,
         find_message_by_hash,
@@ -32,7 +32,7 @@ class Wallet final : public td::actor::Actor {
     };
 
 public:
-    constexpr static td::Slice actor_name = "Wallet";
+    constexpr static td::Slice actor_name = "Contract";
 
     struct BriefAccountInfo {
         AccountStatus status{AccountStatus::uninit};
@@ -58,9 +58,9 @@ public:
         bool wait{};
     };
 
-    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, AccountInfoHandler&& promise);
-    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, FindMessage&& action);
-    Wallet(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context);
+    Contract(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, AccountInfoHandler&& promise);
+    Contract(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, FindMessage&& action);
+    Contract(ExtClientRef ext_client_ref, td::actor::ActorShared<> parent, const block::StdAddress& addr, std::unique_ptr<ActionBase>&& context);
 
 private:
     void start_up() final;
@@ -115,7 +115,7 @@ private:
     MessageFoundHandler message_found_handler_{};
 };
 
-void to_json(nlohmann::json& j, const Wallet::BriefAccountInfo& v);
-void to_json(nlohmann::json& j, const Wallet::BriefMessageInfo& v);
+void to_json(nlohmann::json& j, const Contract::BriefAccountInfo& v);
+void to_json(nlohmann::json& j, const Contract::BriefMessageInfo& v);
 
 }  // namespace app

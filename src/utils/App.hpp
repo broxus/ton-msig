@@ -2,7 +2,7 @@
 
 #include <tonlib/TonlibClient.h>
 
-#include "Wallet.hpp"
+#include "Contract.hpp"
 
 namespace app
 {
@@ -21,8 +21,8 @@ public:
     [[nodiscard]] static auto create(Options&& options) -> td::actor::ActorOwn<App>;
 
     void make_request(const block::StdAddress& addr, std::unique_ptr<ActionBase>&& action);
-    void get_account_info(const block::StdAddress& addr, td::Promise<Wallet::BriefAccountInfo>&& promise);
-    void find_message(const block::StdAddress& addr, Wallet::FindMessage&& action);
+    void get_account_info(const block::StdAddress& addr, td::Promise<Contract::BriefAccountInfo>&& promise);
+    void find_message(const block::StdAddress& addr, Contract::FindMessage&& action);
 
     void close();
 
