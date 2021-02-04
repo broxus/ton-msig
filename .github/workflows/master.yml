@@ -10,17 +10,24 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Setup dependencies
+      - name: Install MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x86
           toolset: 19.25.28614
+
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v6
+        with:
+          vcpkgArguments: "zlib:x86-windows openssl:x86-windows"
+          vcpkgGitCommitId: "ec6fe06e8da05a8157dc8581fa96b36b571c1bd5"
 
       - name: Configure project
         run: |
           git submodule update --init --recursive
           mkdir build && cd build
           cmake .. `
+            -DCMAKE_TOOLCHAIN_FILE="vcpkg\scripts\buildsystems\vcpkg.cmake" `
             -DCMAKE_BUILD_TYPE=Release `
             -DBUILD_TESTING=OFF `
             -DTON_USE_ROCKSDB=OFF `
