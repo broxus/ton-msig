@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include <crypto/Ed25519.h>
 #include <crypto/block/block.h>
 #include <tdutils/td/utils/misc.h>

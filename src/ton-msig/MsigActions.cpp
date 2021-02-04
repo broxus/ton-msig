@@ -56,11 +56,11 @@ auto save_message_info(const std::optional<std::string>& path, td::uint64 create
 auto decode_parameters(const std::vector<ValueRef>& values) -> Parameters
 {
     return Parameters{
-        .max_queued_transactions = values[0]->as<ValueInt>().get<td::uint8>(),
-        .max_custodian_count = values[1]->as<ValueInt>().get<td::uint8>(),
-        .expiration_time = values[2]->as<ValueInt>().get<td::uint64>(),
-        .min_value = values[3]->as<ValueInt>().value,
-        .required_txn_confirms = values[4]->as<ValueInt>().get<td::uint8>(),
+        /*max_queued_transactions*/ values[0]->as<ValueInt>().get<td::uint8>(),
+        /*max_custodian_count*/ values[1]->as<ValueInt>().get<td::uint8>(),
+        /*expiration_time*/ values[2]->as<ValueInt>().get<td::uint64>(),
+        /*min_value*/ values[3]->as<ValueInt>().value,
+        /*required_txn_confirms*/ values[4]->as<ValueInt>().get<td::uint8>(),
     };
 }
 
@@ -68,25 +68,25 @@ auto decode_transaction(const ValueRef& value) -> Transaction
 {
     const auto& t = value->as<ValueTuple>();
     return Transaction{
-        .id = t.values[0]->as<ValueInt>().get<td::uint64>(),
-        .confirmationMask = t.values[1]->as<ValueInt>().get<td::uint32>(),
-        .signsRequired = t.values[2]->as<ValueInt>().get<td::uint8>(),
-        .signsReceived = t.values[3]->as<ValueInt>().get<td::uint8>(),
-        .creator = t.values[4]->as<ValueInt>().value,
-        .index = t.values[5]->as<ValueInt>().get<td::uint8>(),
-        .dest = t.values[6]->as<ValueAddress>().value,
-        .value = t.values[7]->as<ValueInt>().value,
-        .sendFlags = t.values[8]->as<ValueInt>().get<td::uint16>(),
+        /*id*/ t.values[0]->as<ValueInt>().get<td::uint64>(),
+        /*confirmationMask*/ t.values[1]->as<ValueInt>().get<td::uint32>(),
+        /*signsRequired*/ t.values[2]->as<ValueInt>().get<td::uint8>(),
+        /*signsReceived*/ t.values[3]->as<ValueInt>().get<td::uint8>(),
+        /*creator*/ t.values[4]->as<ValueInt>().value,
+        /*index*/ t.values[5]->as<ValueInt>().get<td::uint8>(),
+        /*dest*/ t.values[6]->as<ValueAddress>().value,
+        /*value*/ t.values[7]->as<ValueInt>().value,
+        /*sendFlags*/ t.values[8]->as<ValueInt>().get<td::uint16>(),
         // skip: t.values[9]->as<ValueCell>().value
-        .bounce = t.values[10]->as<ValueBool>().value};
+        /*bounce*/ t.values[10]->as<ValueBool>().value};
 }
 
 auto decode_custodian(const ValueRef& value) -> Custodian
 {
     const auto& t = value->as<ValueTuple>();
     return Custodian{
-        .index = t.values[0]->as<ValueInt>().get<td::uint8>(),
-        .pubkey = t.values[1]->as<ValueInt>().value,
+        /*index*/ t.values[0]->as<ValueInt>().get<td::uint8>(),
+        /*pubkey*/ t.values[1]->as<ValueInt>().value,
     };
 }
 

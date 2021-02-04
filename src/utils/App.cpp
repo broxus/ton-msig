@@ -59,10 +59,7 @@ void App::start_up()
 
 auto App::get_client_ref() -> tonlib::ExtClientRef
 {
-    return tonlib::ExtClientRef{
-        .andl_ext_client_ = raw_client_.get(),
-        .last_block_actor_ = raw_last_block_.get(),
-        .last_config_actor_ = raw_last_config_.get()};
+    return tonlib::ExtClientRef{raw_client_.get(), raw_last_block_.get(), raw_last_config_.get()};
 }
 
 void App::init_ext_client()

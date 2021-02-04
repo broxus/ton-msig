@@ -14,9 +14,6 @@ set(${SUBPROJ_NAME}_SOURCES
         "AddressGenerator.cpp")
 
 include(BuildHelpers)
-set(${SUBPROJ_NAME}_RES_DIR ${CMAKE_CURRENT_BINARY_DIR}/res)
-
-set(${SUBPROJ_NAME}_RES "${${SUBPROJ_NAME}_RES_DIR}/safe_multisig_wallet_tvc.h")
 
 # ############################################################### #
 # Options ####################################################### #
@@ -32,8 +29,7 @@ generate_basic_options_executable(${SUBPROJ_NAME})
 set(
         ${SUBPROJ_NAME}_ALL_SRCS
         ${${SUBPROJ_NAME}_HEADERS}
-        ${${SUBPROJ_NAME}_SOURCES}
-        ${${SUBPROJ_NAME}_RES})
+        ${${SUBPROJ_NAME}_SOURCES})
 
 # ############################################################### #
 # Create target for build ####################################### #
@@ -65,7 +61,7 @@ target_link_libraries(${SUBPROJ_NAME} PUBLIC utils)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(${SUBPROJ_NAME} PRIVATE -ffunction-sections -fdata-sections)
     target_link_libraries(${SUBPROJ_NAME} PRIVATE -Wl,--gc-sections)
-endif ()
+endif()
 
 # Enable IPO
 cmake_policy(SET CMP0069 NEW)

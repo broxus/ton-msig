@@ -116,7 +116,7 @@ void Contract::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>
             case Mode::find_message_by_hash: {
                 // TODO: wait until contract is deployed. However how to get gen_utime?!
 
-                message_found_handler_.set_result(BriefMessageInfo{.found = false});
+                message_found_handler_.set_result(BriefMessageInfo{/*found*/ false});
                 return finish(td::Status::OK());
             }
             default:
@@ -187,7 +187,7 @@ void Contract::got_account_state(lite_api_ptr<lite_api::liteServer_accountState>
             if (still_same_transaction && account_info_.gen_utime > expires_at_) {
                 switch (mode_) {
                     case Mode::find_message_by_hash: {
-                        message_found_handler_.set_value(BriefMessageInfo{.found = false});
+                        message_found_handler_.set_value(BriefMessageInfo{/*found*/ false});
                         return finish(td::Status::OK());
                     }
                     default:
@@ -241,7 +241,7 @@ void Contract::got_last_transactions(lite_api_ptr<lite_api::liteServer_transacti
         }
 
         if (mode_ == Mode::find_message_by_hash) {
-            message_found_handler_.set_value(BriefMessageInfo{.found = false});
+            message_found_handler_.set_value(BriefMessageInfo{/*found*/ false});
             return finish(td::Status::OK());
         }
     }
@@ -279,7 +279,7 @@ void Contract::got_last_transactions(lite_api_ptr<lite_api::liteServer_transacti
 
             switch (mode_) {
                 case Mode::find_message_by_hash: {
-                    message_found_handler_.set_value(BriefMessageInfo{.found = false});
+                    message_found_handler_.set_value(BriefMessageInfo{/*found*/ false});
                     return finish(td::Status::OK());
                 }
                 default:
@@ -360,7 +360,7 @@ auto Contract::found_transaction(block::gen::Transaction::Record&& transaction) 
     LOG(DEBUG) << "Found transaction";
 
     if (mode_ == Mode::find_message_by_hash) {
-        message_found_handler_.set_value(BriefMessageInfo{.found = true, .gen_utime = transaction.now});
+        message_found_handler_.set_value(BriefMessageInfo{/*found*/ true, /*gen_utime*/ transaction.now});
         return td::Status::OK();
     }
 

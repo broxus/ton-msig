@@ -74,7 +74,7 @@ int main(int argc, char** argv)
     int verbosity_level = verbosity_INFO;
     cmd.add_option("-l,--log-level", verbosity_level, "Log verbosity level", true)->check(CLI::Range(1, 7));
 
-    td::size_t thread_count = 2u;
+    std::size_t thread_count = 2u;
     cmd.add_option("-t,--threads", thread_count, "Thread count", true)->check(CLI::PositiveNumber);
 
     td::BufferSlice global_config{MAINNET_CONFIG_JSON, std::size(MAINNET_CONFIG_JSON)};

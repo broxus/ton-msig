@@ -79,7 +79,7 @@ target_link_libraries(${SUBPROJ_NAME} PUBLIC
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(${SUBPROJ_NAME} PUBLIC -ffunction-sections -fdata-sections)
     target_link_libraries(${SUBPROJ_NAME} PUBLIC -Wl,--gc-sections)
-endif ()
+endif()
 
 # Enable IPO
 cmake_policy(SET CMP0069 NEW)
