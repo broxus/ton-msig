@@ -3,8 +3,44 @@ on: [push, pull_request]
 name: master
 
 jobs:
-  check:
-    name: Check
+  build-windows:
+    name: Build for windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Setup dependencies
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+          toolset: 19.25.28614
+
+      - name: Configure project
+        run: |
+          git submodule update --init --recursive
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DTON_USE_ROCKSDB=OFF \
+            -DTON_USE_ABSEIL=OFF \
+            -DTON_USE_GDB=OFF \
+            -DTON_USE_STACKTRACE=OFF
+
+      - name: Build project
+        working-directory: ./build
+        run: |
+          cmake --build . --target ton-msig -- -j2
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: ton-msig
+          path: build/bin/ton-msig.exe
+
+  build-linux:
+    name: Build for linux
     runs-on: ubuntu-18.04
     steps:
       - name: Checkout sources
@@ -17,7 +53,7 @@ jobs:
           sudo apt-get install -y git gcc g++ make libssl-dev zlib1g-dev wget
           wget -qO- "https://cmake.org/files/v3.18/cmake-3.18.4-Linux-x86_64.tar.gz" | sudo tar --strip-components=1 -xz -C /usr/local
 
-      - name: Configure Project
+      - name: Configure project
         run: |
           git submodule update --init --recursive
           mkdir build && cd build
@@ -29,7 +65,7 @@ jobs:
             -DTON_USE_GDB=OFF \
             -DTON_USE_STACKTRACE=OFF
 
-      - name: Build Project
+      - name: Build project
         working-directory: ./build
         run: |
           cmake --build . --target ton-msig -- -j2
