@@ -33,7 +33,7 @@ auto decode_target(const std::string& target) -> td::Result<td::Bits256>
 {
     try {
         const auto decoded_target = cppcodec::hex_lower::decode(target);
-        const auto target_size = std::min(decoded_target.size(), 32ull);
+        const auto target_size = std::min(decoded_target.size(), size_t{32});
 
         td::Bits256 target_bits = td::Bits256::zero();
         if (target_size > 0) {
