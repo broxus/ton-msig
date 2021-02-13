@@ -122,6 +122,16 @@ getCustodians
   Get owners of this wallet
 ```
 
+### Docker
+
+```shell
+git clone https://github.com/broxus/ton-msig.git --recursive
+cd ton-msig
+docker build -t broxus/ton-msig .
+alias ton-msig="docker run --rm -it broxus/ton-msig"
+ton-msig --help-all
+```
+
 ### Building
 
 > * requires the latest CMake (e.g. 3.18)
