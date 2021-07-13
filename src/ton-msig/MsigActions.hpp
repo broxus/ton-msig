@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "Action.hpp"
+#include "AddressGenerator.hpp"
 
 namespace app::msig
 {
@@ -56,6 +57,7 @@ void to_json(nlohmann::json& j, const Confirmation& v);
 struct Constructor final : Action<std::nullopt_t> {
     explicit Constructor(
         Handler&& promise,
+        ContractType contract_type,
         bool force_local,
         td::uint64 time,
         td::uint32 expire,
@@ -73,6 +75,7 @@ struct Constructor final : Action<std::nullopt_t> {
     [[nodiscard]] auto expires_at() const -> td::uint32 final { return expire_; }
     [[nodiscard]] auto is_get_method() const -> bool final { return force_local_; }
 
+    ContractType contract_type_;
     bool force_local_;
     td::uint64 time_;
     td::uint32 expire_;

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 set(_PROJECT_NAME ton-msig)
 set(_PROJECT_LANGUAGE CXX)
+set(CMAKE_CXX_STANDARD 17)
 
 set(_PROJECT_MAJOR_VERSION 1)
 set(_PROJECT_MINOR_VERSION 0)

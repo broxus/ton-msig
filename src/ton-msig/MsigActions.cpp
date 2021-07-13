@@ -138,6 +138,7 @@ void to_json(nlohmann::json& j, const Confirmation& v)
 
 Constructor::Constructor(
     Handler&& promise,
+    ContractType contract_type,
     bool force_local,
     td::uint64 time,
     td::uint32 expire,
@@ -146,6 +147,7 @@ Constructor::Constructor(
     const td::Ed25519::PrivateKey& private_key,
     std::optional<std::string> msg_info_path)
     : Action{std::move(promise)}
+    , contract_type_{contract_type}
     , force_local_{force_local}
     , time_{time}
     , expire_{expire}
@@ -179,7 +181,7 @@ auto Constructor::create_message() -> td::Result<EncodedMessage>
 
     FunctionCallRef call{FunctionCall{std::move(header_values), std::move(input_values), false, private_key_.as_octet_string().copy()}};
 
-    TRY_RESULT(init_state, generate_state_init(public_key))
+    TRY_RESULT(init_state, generate_state_init(contract_type_, public_key))
     TRY_RESULT(body, function->encode_input(call))
 
     return std::make_tuple(function, std::move(init_state), std::move(body));

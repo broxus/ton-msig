@@ -1,6 +1,9 @@
 #include "AddressGenerator.hpp"
 
+#include <res/safe_multisig_wallet_24h_tvc.h>
 #include <res/safe_multisig_wallet_tvc.h>
+#include <res/setcode_multisig_wallet_tvc.h>
+#include <res/surf_tvc.h>
 #include <td/utils/port/thread_local.h>
 
 #include <atomic>
@@ -20,13 +23,34 @@ static auto load_slice(T (&data)[N]) -> td::Slice
     return td::Slice{reinterpret_cast<const char*>(data), N * sizeof(T)};
 }
 
-auto safe_multisig_wallet_tvc() -> td::Ref<vm::Cell>
+auto contract_tvc(ContractType contract_type) -> td::Ref<vm::Cell>
 {
-    static td::Ref<vm::Cell> decoded{};
-    if (decoded.is_null()) {
-        decoded = vm::std_boc_deserialize(load_slice(SAFE_MULTISIG_WALLET_TVC)).move_as_ok();
+    static td::Ref<vm::Cell> decoded[4];
+
+    const auto index = static_cast<int>(contract_type);
+    if (decoded[index].is_null()) {
+        td::Slice data{};
+        switch (contract_type) {
+            case ContractType::SafeMultisigWallet: {
+                data = load_slice(SAFE_MULTISIG_WALLET_TVC);
+                break;
+            }
+            case ContractType::SafeMultisigWallet24h: {
+                data = load_slice(SAFE_MULTISIG_WALLET_24H_TVC);
+                break;
+            }
+            case ContractType::SetcodeMultisigWallet: {
+                data = load_slice(SETCODE_MULTISIG_WALLET_TVC);
+                break;
+            }
+            case ContractType::Surf: {
+                data = load_slice(SURF_TVC);
+                break;
+            }
+        }
+        decoded[index] = vm::std_boc_deserialize(data).move_as_ok();
     }
-    return decoded;
+    return decoded[index];
 }
 
 auto decode_target(const std::string& target) -> td::Result<td::Bits256>
@@ -47,7 +71,7 @@ auto decode_target(const std::string& target) -> td::Result<td::Bits256>
     }
 }
 
-void worker(int& last_matching, std::mutex& output_mutex, td::Bits256 target_bits)
+void worker(ContractType contract_type, unsigned int& last_matching, std::mutex& output_mutex, td::Bits256 target_bits)
 {
     size_t current_iteration = 0;
     auto thread_id = td::get_thread_id();
@@ -61,7 +85,7 @@ void worker(int& last_matching, std::mutex& output_mutex, td::Bits256 target_bit
         auto private_key = mnemonic::generate_key(new_phrase).move_as_ok();
         auto public_key = private_key.get_public_key().move_as_ok();
 
-        auto address = generate_addr(public_key).move_as_ok();
+        auto address = generate_addr(contract_type, public_key).move_as_ok();
 
         if (const auto current_matching = address.count_matching(target_bits); current_matching > last_matching) {
             last_matching = current_matching;
@@ -80,7 +104,7 @@ void worker(int& last_matching, std::mutex& output_mutex, td::Bits256 target_bit
 
 }  // namespace
 
-auto mine_pretty_addr(const std::string& target) -> td::Result<td::Unit>
+auto mine_pretty_addr(ContractType contract_type, const std::string& target) -> td::Result<td::Unit>
 {
     TRY_RESULT(target_bits, decode_target(target))
     LOG(WARNING) << "Target: " << target_bits.to_hex();
@@ -91,11 +115,11 @@ auto mine_pretty_addr(const std::string& target) -> td::Result<td::Unit>
     std::vector<td::thread> threads;
     threads.reserve(thread_count);
 
-    int last_matching = 0;
+    unsigned int last_matching = 0;
     std::mutex output_mutex;
     for (size_t i = 0; i < thread_count; ++i) {
         threads.emplace_back(td::thread(  //
-            [&last_matching, &output_mutex, target_bits] { worker(last_matching, output_mutex, target_bits); }));
+            [contract_type, &last_matching, &output_mutex, target_bits] { worker(contract_type, last_matching, output_mutex, target_bits); }));
     }
 
     for (auto&& thread : threads) {
@@ -105,15 +129,15 @@ auto mine_pretty_addr(const std::string& target) -> td::Result<td::Unit>
     UNREACHABLE();
 }
 
-auto generate_addr(const td::Ed25519::PublicKey& public_key) -> td::Result<ton::StdSmcAddress>
+auto generate_addr(ContractType contract_type, const td::Ed25519::PublicKey& public_key) -> td::Result<ton::StdSmcAddress>
 {
-    TRY_RESULT(state_init, generate_state_init(public_key))
+    TRY_RESULT(state_init, generate_state_init(contract_type, public_key))
     return state_init->get_hash().bits();
 }
 
-auto generate_state_init(const td::Ed25519::PublicKey& public_key) -> td::Result<td::Ref<vm::Cell>>
+auto generate_state_init(ContractType contract_type, const td::Ed25519::PublicKey& public_key) -> td::Result<td::Ref<vm::Cell>>
 {
-    return ftabi::generate_state_init(safe_multisig_wallet_tvc(), public_key);
+    return ftabi::generate_state_init(contract_tvc(contract_type), public_key);
 }
 
 }  // namespace app

@@ -25,6 +25,9 @@ set(${SUBPROJ_NAME}_RES_DIR ${CMAKE_CURRENT_BINARY_DIR}/res)
 configure_file(${RESOURCE_DIR}/config.h.in "${${SUBPROJ_NAME}_RES_DIR}/config.h")
 embed_resource("${RESOURCE_DIR}/mainnet.config.json" "${${SUBPROJ_NAME}_RES_DIR}/mainnet_config_json.h" MAINNET_CONFIG_JSON SIGNED)
 embed_resource("${RESOURCE_DIR}/SafeMultisigWallet.tvc" "${${SUBPROJ_NAME}_RES_DIR}/safe_multisig_wallet_tvc.h" SAFE_MULTISIG_WALLET_TVC UNSIGNED)
+embed_resource("${RESOURCE_DIR}/SafeMultisigWallet24h.tvc" "${${SUBPROJ_NAME}_RES_DIR}/safe_multisig_wallet_24h_tvc.h" SAFE_MULTISIG_WALLET_24H_TVC UNSIGNED)
+embed_resource("${RESOURCE_DIR}/SetcodeMultisigWallet.tvc" "${${SUBPROJ_NAME}_RES_DIR}/setcode_multisig_wallet_tvc.h" SETCODE_MULTISIG_WALLET_TVC UNSIGNED)
+embed_resource("${RESOURCE_DIR}/Surf.tvc" "${${SUBPROJ_NAME}_RES_DIR}/surf_tvc.h" SURF_TVC UNSIGNED)
 
 set(${SUBPROJ_NAME}_RES
         "${${SUBPROJ_NAME}_RES_DIR}/config.h"

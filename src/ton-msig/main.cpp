@@ -108,6 +108,11 @@ int main(int argc, char** argv)
         return subcommand->add_option("-w,--workchain", workchain, "Workchain")->check(CLI::Range(-1, 0));
     };
 
+    ContractType contract_type{ContractType::SafeMultisigWallet};
+    const auto add_contract_type_option = [&contract_type](CLI::App* subcommand) -> CLI::Option* {
+        return subcommand->add_option("--type", contract_type, "Contract type")->check(CLI::Range(0, 4));
+    };
+
     std::optional<std::string> msg_info_path{};
     const auto add_msg_info_path_option = [&msg_info_path](CLI::App* subcommand) -> CLI::Option* {
         return subcommand->add_option("--save", msg_info_path, "Save message info to file");
@@ -188,6 +193,7 @@ int main(int argc, char** argv)
     cmd_generate->add_option("-a,--addr", gen_addr, "Whether to generate an address", true);
     add_workchain_option(cmd_generate);
     add_signature_option(cmd_generate, "-f,--from")->required(false);
+    add_contract_type_option(cmd_generate)->required(false);
     cmd_generate->callback([&] {
         const auto from_existing = key.has_value();
         std::string new_phrase{};
@@ -198,7 +204,7 @@ int main(int argc, char** argv)
             {"public", cppcodec::hex_lower::encode(public_key.as_octet_string())},
             {"secret", cppcodec::hex_lower::encode(private_key.as_octet_string())}};
         if (from_existing || gen_addr) {
-            const auto addr = check_result(generate_addr(public_key));
+            const auto addr = check_result(generate_addr(contract_type, public_key));
             j["address"] = std::to_string(workchain) + ":" + addr.to_hex();
         }
         if (phrase.has_value()) {
@@ -218,7 +224,8 @@ int main(int argc, char** argv)
 
     auto* cmd_mine = cmd.add_subcommand("mine", "Mine pretty address");
     cmd_mine->add_option("prefix", prefix, "Target address prefix in hex format")->required();
-    cmd_mine->callback([&] { check_result(app::mine_pretty_addr(prefix)); });
+    add_contract_type_option(cmd_mine)->required(false);
+    cmd_mine->callback([&] { check_result(app::mine_pretty_addr(contract_type, prefix)); });
 
     // Subcommand: deploy
 
@@ -228,6 +235,7 @@ int main(int argc, char** argv)
     auto* cmd_deploy = cmd.add_subcommand("deploy", "Deploy new contract")->excludes(address_option);
     add_signature_option(cmd_deploy);
     add_workchain_option(cmd_deploy);
+    add_contract_type_option(cmd_deploy)->required(false);
     // add_force_local_option(cmd_deploy); // will not work now
     cmd_deploy
         ->add_option_function<std::vector<std::string>>(
@@ -250,7 +258,7 @@ int main(int argc, char** argv)
     add_msg_info_path_option(cmd_deploy);
     cmd_deploy->callback([&] {
         const auto public_key = check_result(key->get_public_key());
-        const auto addr = check_result(generate_addr(public_key));
+        const auto addr = check_result(generate_addr(contract_type, public_key));
         address = block::StdAddress{workchain, addr, false};
 
         action_make_request = [&](const td::actor::ActorId<App>& actor_id) {
@@ -265,6 +273,7 @@ int main(int argc, char** argv)
 
             return std::make_unique<msig::Constructor>(
                 create_handler<std::nullopt_t>(actor_id, [&](std::nullopt_t) { std::cout << "{}" << std::endl; }),
+                contract_type,
                 force_local,
                 now,
                 expire,
